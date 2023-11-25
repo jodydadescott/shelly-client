@@ -42,7 +42,6 @@ type Client struct {
 	wg             sync.WaitGroup
 	cancel         context.CancelFunc
 	sendTimeout    time.Duration
-	debugEnabled   bool
 	authResponse   *AuthResponse
 }
 
@@ -138,7 +137,7 @@ func (t *Client) run() {
 		}
 	}
 
-	handleEgress := func(conn *gorilla.Conn, errs chan error) {
+	handleEgress := func(conn *gorilla.Conn, errChan *errChan) {
 
 		go func() {
 			for {
@@ -149,32 +148,29 @@ func (t *Client) run() {
 
 				case b := <-t.egressMessages:
 
-					if t.debugEnabled {
-						zap.L().Debug(fmt.Sprintf("TX->%s", string(b)))
-					}
-
 					err := conn.WriteMessage(gorilla.BinaryMessage, b)
 					if err != nil {
-						errs <- err
+						errChan.putError(err)
 						return
 					}
+
 				}
 			}
 
 		}()
 	}
 
-	handleIngress := func(conn *gorilla.Conn, errs chan error) {
+	handleIngress := func(conn *gorilla.Conn, errChan *errChan) {
 		go func() {
 			for {
 				_, b, err := conn.ReadMessage()
 
-				if t.debugEnabled {
+				if logger.Trace {
 					zap.L().Debug(fmt.Sprintf("RX->%s", string(b)))
 				}
 
 				if err != nil {
-					errs <- err
+					errChan.putError(err)
 					return
 				}
 
@@ -184,17 +180,18 @@ func (t *Client) run() {
 	}
 
 	handle := func(conn *gorilla.Conn) error {
-		errs := make(chan error, 2)
-		defer close(errs)
-		handleIngress(conn, errs)
-		handleEgress(conn, errs)
 
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-errs:
-			return err
-		}
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		errChan := newErrChan()
+
+		handleIngress(conn, errChan)
+		handleEgress(conn, errChan)
+
+		err := errChan.getError(ctx)
+		errChan.close()
+		return err
 
 	}
 
@@ -395,4 +392,52 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 	}
 
 	return response.rawBytes, nil
+}
+
+type errChan struct {
+	closed bool
+	mutex  sync.Mutex
+	errs   chan error
+}
+
+func newErrChan() *errChan {
+	return &errChan{
+		errs: make(chan error, 2),
+	}
+}
+
+func (t *errChan) putError(err error) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if t.closed {
+		return
+	}
+
+	t.closed = true
+	t.errs <- err
+}
+
+func (t *errChan) getError(ctx context.Context) error {
+
+	select {
+
+	case <-ctx.Done():
+		return nil
+
+	case err := <-t.errs:
+		return err
+
+	}
+}
+
+func (t *errChan) close() {
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if t.closed {
+		return
+	}
+
+	close(t.errs)
+	t.closed = true
 }

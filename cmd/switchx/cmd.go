@@ -1,6 +1,7 @@
 package switchx
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -16,6 +17,7 @@ var (
 
 type callback interface {
 	Switch() (*switchx.Client, error)
+	GetCTX() context.Context
 }
 
 func NewCmd(callback callback) *cobra.Command {
@@ -59,7 +61,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Set(cmd.Context(), *switchID, &truePointer)
+			return client.Set(callback.GetCTX(), *switchID, &truePointer)
 		},
 	}
 
@@ -78,7 +80,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Set(cmd.Context(), *switchID, &falsePointer)
+			return client.Set(callback.GetCTX(), *switchID, &falsePointer)
 		},
 	}
 
@@ -97,7 +99,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Toggle(cmd.Context(), *switchID)
+			return client.Toggle(callback.GetCTX(), *switchID)
 		},
 	}
 

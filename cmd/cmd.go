@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"reflect"
 	"strings"
 	"time"
@@ -278,6 +279,30 @@ func (t *Cmd) WriteStdout(input any) error {
 	}
 
 	return fmt.Errorf("format type %s is unknown", t.outputArg)
+}
+
+func (t *Cmd) GetCTX() context.Context {
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt)
+
+	go func() {
+
+		select {
+
+		case <-interruptChan: // first signal, cancel context
+			cancel()
+
+		case <-ctx.Done():
+
+		}
+
+	}()
+
+	return ctx
 }
 
 // func (t *Cmd) WriteStderr(s string) {

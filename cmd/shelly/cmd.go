@@ -1,6 +1,7 @@
 package shelly
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -12,6 +13,7 @@ import (
 type callback interface {
 	WriteStdout(any) error
 	Shelly() (*shelly.Client, error)
+	GetCTX() context.Context
 }
 
 const (
@@ -40,7 +42,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			config, err := client.GetConfig(cmd.Context(), markupArg)
+			config, err := client.GetConfig(callback.GetCTX(), markupArg)
 			if err != nil {
 				return err
 			}
@@ -61,7 +63,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			result, err := client.GetStatus(cmd.Context())
+			result, err := client.GetStatus(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -80,7 +82,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			result, err := client.GetDeviceInfo(cmd.Context())
+			result, err := client.GetDeviceInfo(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -99,7 +101,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			result, err := client.ListMethods(cmd.Context())
+			result, err := client.ListMethods(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -118,7 +120,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			result, err := client.CheckForUpdate(cmd.Context())
+			result, err := client.CheckForUpdate(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -137,7 +139,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			err = client.Reboot(cmd.Context())
+			err = client.Reboot(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -166,7 +168,7 @@ func NewCmd(callback callback) *cobra.Command {
 				params.Url = &urlArg
 			}
 
-			return client.Update(cmd.Context(), params)
+			return client.Update(callback.GetCTX(), params)
 		},
 	}
 
@@ -183,7 +185,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.FactoryReset(cmd.Context())
+			return client.FactoryReset(callback.GetCTX())
 		},
 	}
 
@@ -197,7 +199,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.ResetWiFiConfig(cmd.Context())
+			return client.ResetWiFiConfig(callback.GetCTX())
 		},
 	}
 
@@ -220,7 +222,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			report, err := client.SetConfigFromFile(cmd.Context(), config)
+			report, err := client.SetConfigFromFile(callback.GetCTX(), config)
 			if err != nil {
 				return err
 			}

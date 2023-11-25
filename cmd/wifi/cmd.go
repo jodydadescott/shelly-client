@@ -1,6 +1,8 @@
 package wifi
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 
 	"github.com/jodydadescott/shelly-client/sdk/wifi"
@@ -9,6 +11,7 @@ import (
 type callback interface {
 	WriteStdout(any) error
 	Wifi() (*wifi.Client, error)
+	GetCTX() context.Context
 }
 
 func NewCmd(callback callback) *cobra.Command {
@@ -28,7 +31,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			results, err := client.Scan(cmd.Context())
+			results, err := client.Scan(callback.GetCTX())
 			if err != nil {
 				return err
 			}
@@ -48,7 +51,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			results, err := client.ListAPClients(cmd.Context())
+			results, err := client.ListAPClients(callback.GetCTX())
 			if err != nil {
 				return err
 			}

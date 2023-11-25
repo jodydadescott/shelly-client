@@ -1,6 +1,7 @@
 package light
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -16,6 +17,7 @@ var (
 
 type callback interface {
 	Light() (*light.Client, error)
+	GetCTX() context.Context
 }
 
 func NewCmd(callback callback) *cobra.Command {
@@ -59,7 +61,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Set(cmd.Context(), *switchID, &truePointer, nil)
+			return client.Set(callback.GetCTX(), *switchID, &truePointer, nil)
 		},
 	}
 
@@ -78,7 +80,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Set(cmd.Context(), *switchID, &falsePointer, nil)
+			return client.Set(callback.GetCTX(), *switchID, &falsePointer, nil)
 		},
 	}
 
@@ -108,7 +110,7 @@ func NewCmd(callback callback) *cobra.Command {
 				brightness = f
 			}
 
-			return client.Set(cmd.Context(), *switchID, nil, &brightness)
+			return client.Set(callback.GetCTX(), *switchID, nil, &brightness)
 		},
 	}
 
@@ -127,7 +129,7 @@ func NewCmd(callback callback) *cobra.Command {
 				return err
 			}
 
-			return client.Toggle(cmd.Context(), *switchID)
+			return client.Toggle(callback.GetCTX(), *switchID)
 		},
 	}
 
