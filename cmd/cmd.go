@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	"github.com/jodydadescott/shelly-client/cmd/files"
 	lightcmd "github.com/jodydadescott/shelly-client/cmd/light"
 	shellycmd "github.com/jodydadescott/shelly-client/cmd/shelly"
 	switchxcmd "github.com/jodydadescott/shelly-client/cmd/switchx"
@@ -29,13 +28,25 @@ import (
 	"github.com/jodydadescott/shelly-client/sdk/wifi"
 )
 
+const (
+	BinaryName = "shelly-cli"
+
+	DebugEnvVar          = "DEBUG"
+	ShellyConfigEnvVar   = "SHELLY_CONFIG"
+	ShellyHostnameEnvVar = "SHELLY_HOST"
+	ShellyUsernameEnvVar = "SHELLY_USER"
+	ShellyPasswordEnvVar = "SHELLY_PASS"
+	ShellyOutputEnvVar   = "SHELLY_OUTPUT"
+
+	ShellyOutputDefault = "prettyjson"
+)
+
 type Cmd struct {
 	*cobra.Command
 	_client       *sdk.Client
 	hostnameArg   string
 	passwordArg   string
 	outputArg     string
-	configArg     string
 	timeoutArg    int
 	debugLevelArg string
 }
@@ -82,7 +93,6 @@ func NewCmd() *Cmd {
 	t.PersistentFlags().StringVarP(&t.hostnameArg, "hostname", "H", "", fmt.Sprintf("Hostname; optionally use env var '%s'", ShellyHostnameEnvVar))
 	t.PersistentFlags().StringVarP(&t.hostnameArg, "password", "p", "", fmt.Sprintf("Password; optionally use env var '%s'", ShellyPasswordEnvVar))
 	t.PersistentFlags().StringVarP(&t.outputArg, "output", "o", ShellyOutputDefault, fmt.Sprintf("Output format. One of: prettyjson | json | jsonpath | yaml ; Optionally use env var '%s'", ShellyOutputEnvVar))
-	t.PersistentFlags().StringVarP(&t.configArg, "config", "c", "", "Config file or Directory name. Directory will look for file name device-id then app-id")
 	t.PersistentFlags().IntVarP(&t.timeoutArg, "timeout", "t", 0, "The timeout in seconds for the websocket call to the device")
 	t.PersistentFlags().StringVarP(&t.debugLevelArg, "debug", "D", "", fmt.Sprintf("debug level (TRACE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", DebugEnvVar))
 
@@ -270,10 +280,7 @@ func (t *Cmd) WriteStdout(input any) error {
 	return fmt.Errorf("format type %s is unknown", t.outputArg)
 }
 
-func (t *Cmd) WriteStderr(s string) {
-	fmt.Fprintln(os.Stderr, s)
-}
+// func (t *Cmd) WriteStderr(s string) {
 
-func (t *Cmd) GetFiles() (*files.Files, error) {
-	return files.NewFiles(t.configArg)
-}
+// 	fmt.Fprintln(os.Stderr, s)
+// }

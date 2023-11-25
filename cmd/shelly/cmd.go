@@ -1,32 +1,29 @@
 package shelly
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
+	"os"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 
-	"github.com/jodydadescott/shelly-client/cmd/files"
 	"github.com/jodydadescott/shelly-client/sdk/shelly"
 )
 
 type callback interface {
 	WriteStdout(any) error
-	WriteStderr(s string)
 	Shelly() (*shelly.Client, error)
-	RebootDevice(ctx context.Context) error
-	GetFiles() (*files.Files, error)
 }
+
+const (
+	ShellyConfigVar = "SHELLY_CONFIG"
+)
 
 func NewCmd(callback callback) *cobra.Command {
 
 	var stageArg string
 	var urlArg string
-	var disableAutoRebootArg bool
 	var markupArg bool
+	var configArg string
 
 	rootCmd := &cobra.Command{
 		Use:   "shelly",
@@ -209,88 +206,30 @@ func NewCmd(callback callback) *cobra.Command {
 		Short: "Sets config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
+			config := configArg
+			if config == "" {
+				config = os.Getenv(ShellyConfigVar)
+			}
+
+			if config == "" {
+				return fmt.Errorf("config is required")
+			}
+
 			client, err := callback.Shelly()
 			if err != nil {
 				return err
 			}
 
-			var config *shelly.ShellyConfig
-
-			setConfig := func(file *files.File) error {
-
-				var errors *multierror.Error
-
-				callback.WriteStderr(fmt.Sprintf("Using file %s", file.FullName))
-
-				err := json.Unmarshal(file.Bytes, &config)
-
-				if err != nil {
-					errors = multierror.Append(errors, err)
-					err = yaml.Unmarshal(file.Bytes, &config)
-
-					if err != nil {
-						errors = multierror.Append(errors, err)
-						errors = multierror.Append(errors, fmt.Errorf("invalid format. Expect JSON or YAML"))
-						return errors.ErrorOrNil()
-					}
-				}
-
-				report := client.SetConfig(cmd.Context(), config)
-
-				err = report.Error()
-
-				if err != nil {
-					return err
-				}
-
-				if report.RebootRequired() {
-					if disableAutoRebootArg {
-						callback.WriteStderr("reboot is required; autoreboot is disabled")
-						return nil
-					}
-
-					callback.WriteStderr("rebooting")
-					return callback.RebootDevice(cmd.Context())
-				}
-
-				return nil
-			}
-
-			files, err := callback.GetFiles()
+			report, err := client.SetConfigFromFile(cmd.Context(), config)
 			if err != nil {
 				return err
 			}
 
-			file := files.GetNamedFile()
-			if file != nil {
-				return setConfig(file)
-			}
-
-			file = files.GetSTDIN()
-			if file != nil {
-				return setConfig(file)
-			}
-
-			device, err := client.GetDeviceInfo(cmd.Context())
-			if err != nil {
-				return err
-			}
-
-			file = files.GetFile(*device.ID)
-			if file != nil {
-				return setConfig(file)
-			}
-
-			file = files.GetFile(*device.App)
-			if file != nil {
-				return setConfig(file)
-			}
-
-			return nil
+			return callback.WriteStdout(report)
 		},
 	}
 
-	setConfigCmd.PersistentFlags().BoolVar(&disableAutoRebootArg, "disable-autoreboot", false, "disable automatic reboot (if reboot is necessary)")
+	setConfigCmd.PersistentFlags().StringVarP(&configArg, "config", "c", "", fmt.Sprintf("Config file or Directory name. Directory will look for file name device-id then app-id; env var is %s", ShellyConfigVar))
 
 	rootCmd.AddCommand(getConfigCmd, getStatusCmd, getInfoCmd, getMethodsCmd,
 		getUpdatesCmd, rebootCmd, updateCmd,

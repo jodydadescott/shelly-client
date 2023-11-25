@@ -7,6 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
+	"github.com/hashicorp/go-multierror"
+	"github.com/jodydadescott/shelly-client/filecab"
 	"github.com/jodydadescott/shelly-client/sdk/bluetooth"
 	"github.com/jodydadescott/shelly-client/sdk/cloud"
 	"github.com/jodydadescott/shelly-client/sdk/ethernet"
@@ -15,6 +20,7 @@ import (
 	"github.com/jodydadescott/shelly-client/sdk/mqtt"
 	"github.com/jodydadescott/shelly-client/sdk/switchx"
 	"github.com/jodydadescott/shelly-client/sdk/system"
+	"github.com/jodydadescott/shelly-client/sdk/types"
 	"github.com/jodydadescott/shelly-client/sdk/websocket"
 	"github.com/jodydadescott/shelly-client/sdk/wifi"
 )
@@ -261,7 +267,85 @@ func (t *Client) SetConfig(ctx context.Context, config *ShellyConfig) *ShellyRep
 		report.Auth.Error = t.setAuth(ctx, config.Auth)
 	}
 
+	if report.RebootRequired() {
+		zap.L().Debug("reboot is required; rebooting")
+		t.Reboot(ctx)
+	}
+
 	return report
+}
+
+// SetConfigFromFile sets config from specified file or directory. If file is a directory the
+// directory will be searched for config with matching deice ID. If not found then directory
+// will be searched for file with matching device App
+func (t *Client) SetConfigFromFile(ctx context.Context, input string) (*ShellyReport, error) {
+
+	cab := filecab.NewCabinet(input)
+
+	getConfig := func(input []byte) (*types.ShellyConfig, error) {
+
+		var config types.ShellyConfig
+		err := json.Unmarshal(input, &config)
+		if err == nil {
+			return &config, nil
+		}
+
+		var errs *multierror.Error
+
+		errs = multierror.Append(errs, err)
+
+		err = yaml.Unmarshal(input, &config)
+		if err == nil {
+			return &config, nil
+		}
+
+		errs = multierror.Append(errs, err)
+
+		return nil, errs.ErrorOrNil()
+	}
+
+	setConfig := func(folder *filecab.Folder) (*ShellyReport, error) {
+
+		if folder.STDIN {
+			zap.L().Debug("using config from STDIN")
+		} else {
+			zap.L().Debug(fmt.Sprintf("using config file %s", folder.FullName))
+		}
+
+		config, err := getConfig(folder.Bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		return t.SetConfig(ctx, config), nil
+	}
+
+	isDir, err := cab.IsDir()
+	if err != nil {
+		return nil, err
+	}
+
+	if !isDir {
+		folder, err := cab.Folder()
+		if err != nil {
+			return nil, err
+		}
+		return setConfig(folder)
+	}
+
+	device, err := t.GetDeviceInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cab.AddMatch(*device.ID, *device.App)
+
+	folder, err := cab.Folder()
+	if err != nil {
+		return nil, err
+	}
+
+	return setConfig(folder)
 }
 
 // GetDeviceInfo returns information about the device.
