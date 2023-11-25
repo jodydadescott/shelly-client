@@ -82,7 +82,7 @@ func NewCmd() *Cmd {
 	t.PersistentFlags().StringVarP(&t.hostnameArg, "hostname", "H", "", fmt.Sprintf("Hostname; optionally use env var '%s'", ShellyHostnameEnvVar))
 	t.PersistentFlags().StringVarP(&t.hostnameArg, "password", "p", "", fmt.Sprintf("Password; optionally use env var '%s'", ShellyPasswordEnvVar))
 	t.PersistentFlags().StringVarP(&t.outputArg, "output", "o", ShellyOutputDefault, fmt.Sprintf("Output format. One of: prettyjson | json | jsonpath | yaml ; Optionally use env var '%s'", ShellyOutputEnvVar))
-	t.PersistentFlags().StringVarP(&t.configArg, "config", "c", "", "Config file or Directory name. If directory name is specified then the directory will be searched for a config with the names in order of: device.*, type.* where * is json or yaml")
+	t.PersistentFlags().StringVarP(&t.configArg, "config", "c", "", "Config file or Directory name. Directory will look for file name device-id then app-id")
 	t.PersistentFlags().IntVarP(&t.timeoutArg, "timeout", "t", 0, "The timeout in seconds for the websocket call to the device")
 	t.PersistentFlags().StringVarP(&t.debugLevelArg, "debug", "D", "", fmt.Sprintf("debug level (TRACE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", DebugEnvVar))
 

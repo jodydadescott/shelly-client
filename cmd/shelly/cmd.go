@@ -209,6 +209,11 @@ func NewCmd(callback callback) *cobra.Command {
 		Short: "Sets config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
+			client, err := callback.Shelly()
+			if err != nil {
+				return err
+			}
+
 			var config *shelly.ShellyConfig
 
 			setConfig := func(file *files.File) error {
@@ -230,12 +235,25 @@ func NewCmd(callback callback) *cobra.Command {
 					}
 				}
 
-				return nil
-			}
+				report := client.SetConfig(cmd.Context(), config)
 
-			client, err := callback.Shelly()
-			if err != nil {
-				return err
+				err = report.Error()
+
+				if err != nil {
+					return err
+				}
+
+				if report.RebootRequired() {
+					if disableAutoRebootArg {
+						callback.WriteStderr("reboot is required; autoreboot is disabled")
+						return nil
+					}
+
+					callback.WriteStderr("rebooting")
+					return callback.RebootDevice(cmd.Context())
+				}
+
+				return nil
 			}
 
 			files, err := callback.GetFiles()
@@ -266,24 +284,6 @@ func NewCmd(callback callback) *cobra.Command {
 			file = files.GetFile(*device.App)
 			if file != nil {
 				return setConfig(file)
-			}
-
-			report := client.SetConfig(cmd.Context(), config)
-
-			err = report.Error()
-
-			if err != nil {
-				return err
-			}
-
-			if report.RebootRequired() {
-				if disableAutoRebootArg {
-					callback.WriteStderr("reboot is required; autoreboot is disabled")
-					return nil
-				}
-
-				callback.WriteStderr("rebooting")
-				return callback.RebootDevice(cmd.Context())
 			}
 
 			return nil

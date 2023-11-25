@@ -1,3 +1,7 @@
+tmp:
+	env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -v -trimpath -o shelly-client ../../../../shelly-client.go
+	scp shelly-client daisy:scan/.
+
 shelly-client:
 	env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -v -trimpath -o shelly-client ../../../../shelly-client.go
 
