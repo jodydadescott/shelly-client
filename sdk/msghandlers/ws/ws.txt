@@ -15,6 +15,14 @@ import (
 	"github.com/jodydadescott/shelly-client/sdk/types"
 )
 
+const (
+	WsScheme         = "ws"
+	WsPath           = "/rpc"
+	FailWaitDuration = time.Duration(3) * time.Second
+)
+
+var defaultSendTimeout = time.Duration(time.Second * 10)
+
 type Config = types.ClientConfig
 type MessageHandlerFactory = types.MessageHandlerFactory
 type MessageHandler = types.MessageHandler
@@ -24,57 +32,42 @@ type AuthRequest = types.AuthRequest
 type Response = types.Response
 
 type Client struct {
-	config            *Config
-	authResponseMutex sync.RWMutex
-	handleMutex       sync.RWMutex
-	handleMap         map[int]*Handle
-	egressMessages    chan []byte
-	uniqID            int
-	wg                sync.WaitGroup
-	cancel            context.CancelFunc
-	authResponse      *AuthResponse
+	hostname       string
+	username       string
+	password       string
+	mutex          sync.RWMutex
+	handleMap      map[int]*Handle
+	egressMessages chan []byte
+	uniqID         int
+	wg             sync.WaitGroup
+	cancel         context.CancelFunc
+	sendTimeout    time.Duration
+	authResponse   *AuthResponse
 }
 
 func New(config *Config) MessageHandlerFactory {
 	zap.L().Debug("New")
 
-	config = config.Clone()
+	t := &Client{
+		hostname:       config.Hostname,
+		password:       config.Password,
+		username:       config.Username,
+		sendTimeout:    config.SendTimeout,
+		handleMap:      make(map[int]*Handle),
+		egressMessages: make(chan []byte, 50),
+	}
 
-	if config.Hostname == "" {
+	if t.hostname == "" {
 		panic("hostname is required")
 	}
 
-	if config.SendTimeout <= 0 {
-		config.SendTimeout = defaultSendTimeout
-		zap.L().Debug(fmt.Sprintf("sendTimeout is %s (default)", config.SendTimeout.String()))
-	} else {
-		zap.L().Debug(fmt.Sprintf("sendTimeout is %s (config)", config.SendTimeout.String()))
+	if t.sendTimeout <= 0 {
+		t.sendTimeout = defaultSendTimeout
+		zap.L().Debug("sendTimeout set to default")
 	}
 
-	if config.RetryWait <= 0 {
-		config.RetryWait = defaultRetryWait
-		zap.L().Debug(fmt.Sprintf("retryWait is %s (default)", config.RetryWait.String()))
-	} else {
-		zap.L().Debug(fmt.Sprintf("retryWait is %s (config)", config.RetryWait.String()))
-	}
-
-	if config.SendTrys <= 0 {
-		config.SendTrys = defaultSendTrys
-		zap.L().Debug(fmt.Sprintf("sendTrys is %d (default)", config.SendTrys))
-	} else {
-		zap.L().Debug(fmt.Sprintf("sendTrys is %d (config)", config.SendTrys))
-	}
-
-	if config.Password == "" {
-		zap.L().Debug("password is NOT set")
-	} else {
-		zap.L().Debug("password is set")
-	}
-
-	t := &Client{
-		config:         config,
-		handleMap:      make(map[int]*Handle),
-		egressMessages: make(chan []byte, 50),
+	if t.password == "" {
+		zap.L().Debug("password is not set")
 	}
 
 	t.run()
@@ -86,14 +79,14 @@ func (t *Client) IsAuthEnabled() bool {
 }
 
 func (t *Client) getAuthResponse() *AuthResponse {
-	t.authResponseMutex.RLock()
-	defer t.authResponseMutex.RUnlock()
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	return t.authResponse
 }
 
 func (t *Client) setAuthResponse(authResponse *AuthResponse) {
-	t.authResponseMutex.Lock()
-	defer t.authResponseMutex.Unlock()
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	t.authResponse = authResponse
 }
 
@@ -110,10 +103,21 @@ func (t *Client) Close() {
 
 func (t *Client) run() {
 
+	if t.sendTimeout <= 0 {
+		t.sendTimeout = defaultSendTimeout
+		zap.L().Debug(fmt.Sprintf("sendTimeout is %s (default)", t.sendTimeout.String()))
+	} else {
+		zap.L().Debug(fmt.Sprintf("sendTimeout is %s (config)", t.sendTimeout.String()))
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel
 
 	routeMessage := func(b []byte) {
+
+		if logger.Trace {
+			zap.L().Debug(fmt.Sprintf("Received->%s", string(b)))
+		}
 
 		msg := &Response{}
 		err := json.Unmarshal(b, msg)
@@ -122,10 +126,8 @@ func (t *Client) run() {
 			return
 		}
 
-		zap.L().Debug("getting handle mutex")
-		t.handleMutex.RLock()
-		defer t.handleMutex.RUnlock()
-		defer zap.L().Debug("releasing handle mutex")
+		t.mutex.RLock()
+		defer t.mutex.RUnlock()
 
 		handle := t.handleMap[*msg.ID]
 		if handle == nil {
@@ -150,10 +152,6 @@ func (t *Client) run() {
 
 				case b := <-t.egressMessages:
 
-					if logger.Trace {
-						zap.L().Debug(fmt.Sprintf("TX->%s", string(b)))
-					}
-
 					err := conn.WriteMessage(gorilla.BinaryMessage, b)
 					if err != nil {
 						zap.L().Debug("handleEgress closed by error")
@@ -172,14 +170,14 @@ func (t *Client) run() {
 			for {
 				_, b, err := conn.ReadMessage()
 
-				if logger.Trace {
-					zap.L().Debug(fmt.Sprintf("RX->%s", string(b)))
-				}
-
 				if err != nil {
 					zap.L().Debug("handleIngress closed by error")
 					errChan.putError(err)
 					return
+				}
+
+				if logger.Trace {
+					zap.L().Debug(fmt.Sprintf("RX->%s", string(b)))
 				}
 
 				routeMessage(b)
@@ -202,7 +200,7 @@ func (t *Client) run() {
 	}
 
 	connect := func() error {
-		theURL := url.URL{Scheme: WsScheme, Host: t.config.Hostname, Path: wsPath}
+		theURL := url.URL{Scheme: WsScheme, Host: t.hostname, Path: WsPath}
 		conn, _, err := gorilla.DefaultDialer.Dial(theURL.String(), nil)
 
 		if err != nil {
@@ -223,7 +221,7 @@ func (t *Client) run() {
 
 		for {
 
-			zap.L().Debug(fmt.Sprintf("Connecting to %s", t.config.Hostname))
+			zap.L().Debug(fmt.Sprintf("Connecting to %s", t.hostname))
 
 			err := connect()
 
@@ -231,7 +229,7 @@ func (t *Client) run() {
 				return
 			}
 
-			zap.L().Debug(fmt.Sprintf("Connect error %v; will try again in %v", err, defaultRetryWait.String()))
+			zap.L().Debug(fmt.Sprintf("Connect error %v; will try again in %v", err, FailWaitDuration))
 
 			select {
 
@@ -239,7 +237,7 @@ func (t *Client) run() {
 				zap.L().Debug("Connect cancelled")
 				return
 
-			case <-time.After(defaultRetryWait):
+			case <-time.After(FailWaitDuration):
 				continue
 			}
 
@@ -249,27 +247,23 @@ func (t *Client) run() {
 
 }
 
-func (t *Client) NewHandle(name string) MessageHandler {
+func (t *Client) NewHandle() MessageHandler {
 
-	zap.L().Debug(fmt.Sprintf("(*Client) NewHandle(%s)", name))
+	zap.L().Debug("(*Client) NewHandle()")
 
-	zap.L().Debug("getting handle mutex")
-	t.handleMutex.Lock()
-	defer t.handleMutex.Unlock()
-	defer zap.L().Debug("releasing handle mutex")
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 
 	t.uniqID = t.uniqID + 1
 
 	handle := &Handle{
 		client:  t,
 		id:      t.uniqID,
-		receive: make(chan *responseWrapper, 30),
+		receive: make(chan *responseWrapper),
 		done:    make(chan struct{}),
 	}
 
 	t.handleMap[handle.id] = handle
-
-	zap.L().Debug(fmt.Sprintf("(*Client) NewHandle(%s) returned", name))
 
 	return handle
 }
@@ -309,6 +303,10 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 
 	requestBytes, err := json.Marshal(request)
 
+	if logger.Trace {
+		zap.L().Debug(fmt.Sprintf("Send->%s", string(requestBytes)))
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -330,17 +328,17 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 				return response, nil
 
 			case <-t.done:
-				return nil, fmt.Errorf("channel closed shutdown")
+				return nil, fmt.Errorf("channel closed by server")
 
 			case <-ctx.Done():
-				return nil, fmt.Errorf("channel closed by caller")
+				return nil, fmt.Errorf("channel closed by client")
 
-			case <-time.After(t.client.config.SendTimeout):
-				if counter >= t.client.config.SendTrys {
-					zap.L().Debug(fmt.Sprintf("try %d of %d; giving up", counter, t.client.config.SendTrys))
+			case <-time.After(t.client.sendTimeout):
+				if counter >= 3 {
+					zap.L().Debug(fmt.Sprintf("timeout try %d of 3; giving up", counter))
 					return nil, fmt.Errorf("timeout waiting for response")
 				}
-				zap.L().Debug(fmt.Sprintf("try %d of %d; will try again", counter, t.client.config.SendTrys))
+				zap.L().Debug(fmt.Sprintf("timeout try %d of 3; will try again", counter))
 				counter++
 
 			}
@@ -361,11 +359,11 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 
 			zap.L().Debug("server responded with auth required")
 
-			if t.client.config.Username == "" {
+			if t.client.username == "" {
 				return nil, fmt.Errorf("username is required")
 			}
 
-			if t.client.config.Password == "" {
+			if t.client.password == "" {
 				return nil, fmt.Errorf("password is required")
 			}
 
@@ -375,8 +373,8 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 				return nil, err
 			}
 
-			authRequest.Username = t.client.config.Username
-			authRequest.Password = t.client.config.Password
+			authRequest.Username = t.client.username
+			authRequest.Password = t.client.password
 			authResponse, err := authRequest.ToAuthResponse()
 
 			if err != nil {

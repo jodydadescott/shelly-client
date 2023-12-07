@@ -5,12 +5,11 @@ import (
 )
 
 type MessageHandlerFactory interface {
-	NewHandle() MessageHandler
+	NewHandle(string) MessageHandler
+	IsAuthEnabled() bool
 	Close()
 }
 
 type MessageHandler interface {
 	Send(ctx context.Context, request *Request) ([]byte, error)
-	Close()
-	IsAuthEnabled() bool
 }

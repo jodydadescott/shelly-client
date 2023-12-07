@@ -24,8 +24,15 @@ func (t *Client) getMessageHandler() MessageHandler {
 		return t._messageHandler
 	}
 
-	t._messageHandler = t.NewHandle()
+	t._messageHandler = t.NewHandle(Component)
 	return t._messageHandler
+}
+
+func getErr(method string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("component %s, method %s, error %w", Component, method, err)
 }
 
 // GetStatus returns status for component or error
@@ -41,21 +48,21 @@ func (t *Client) GetStatus(ctx context.Context, id int) (*Status, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	response := &GetStatusResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return response.Result, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	return response.Result, nil
@@ -73,21 +80,21 @@ func (t *Client) GetConfig(ctx context.Context, id int) (*Config, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	response := &GetConfigResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return response.Result, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	response.Result.Markup()
@@ -112,47 +119,21 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) error {
 	})
 
 	if err != nil {
-		return err
+		return getErr(method, err)
 	}
 
 	response := &SetConfigResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return err
+		return getErr(method, err)
 	}
 
 	if response.Error != nil {
-		return response.Error
+		return getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return fmt.Errorf("Result is missing from response")
-	}
-
-	return nil
-}
-
-func setOrToggle(respBytes []byte, err error) error {
-
-	if err != nil {
-		return err
-	}
-
-	rawResponse := &SetConfigResponse{}
-	err = json.Unmarshal(respBytes, rawResponse)
-
-	if err != nil {
-		return err
-	}
-
-	response := &SetConfigResponse{}
-	err = json.Unmarshal(respBytes, response)
-	if err != nil {
-		return err
-	}
-
-	if response.Error != nil {
-		return response.Error
+		return getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	return nil
@@ -163,13 +144,36 @@ func (t *Client) Set(ctx context.Context, id int, on *bool) error {
 
 	method := Component + ".Set"
 
-	return setOrToggle(t.getMessageHandler().Send(ctx, &Request{
+	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
 		Params: &Params{
 			ID: id,
 			On: on,
 		},
-	}))
+	})
+
+	if err != nil {
+		return getErr(method, err)
+	}
+
+	rawResponse := &SetConfigResponse{}
+	err = json.Unmarshal(respBytes, rawResponse)
+
+	if err != nil {
+		return getErr(method, err)
+	}
+
+	response := &SetConfigResponse{}
+	err = json.Unmarshal(respBytes, response)
+	if err != nil {
+		return getErr(method, err)
+	}
+
+	if response.Error != nil {
+		return getErr(method, response.Error)
+	}
+
+	return nil
 }
 
 // Toggle toggles switch. If switch is on it will be turned off. If switch is off it will be turned on.
@@ -177,17 +181,33 @@ func (t *Client) Toggle(ctx context.Context, id int) error {
 
 	method := Component + ".Toggle"
 
-	return setOrToggle(t.getMessageHandler().Send(ctx, &Request{
+	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
 		Params: &Params{
 			ID: id,
 		},
-	}))
-}
+	})
 
-// Close closes messange handler
-func (t *Client) Close() {
-	if t._messageHandler != nil {
-		t._messageHandler.Close()
+	if err != nil {
+		return getErr(method, err)
 	}
+
+	rawResponse := &SetConfigResponse{}
+	err = json.Unmarshal(respBytes, rawResponse)
+
+	if err != nil {
+		return getErr(method, err)
+	}
+
+	response := &SetConfigResponse{}
+	err = json.Unmarshal(respBytes, response)
+	if err != nil {
+		return getErr(method, err)
+	}
+
+	if response.Error != nil {
+		return getErr(method, response.Error)
+	}
+
+	return nil
 }

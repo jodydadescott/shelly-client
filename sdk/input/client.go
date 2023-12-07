@@ -23,8 +23,20 @@ func (t *Client) getMessageHandler() MessageHandler {
 		return t._messageHandler
 	}
 
-	t._messageHandler = t.NewHandle()
+	t._messageHandler = t.NewHandle(Component)
 	return t._messageHandler
+}
+
+func getErr(method string, id *int, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if id == nil {
+		return fmt.Errorf("component %s, method %s, error %w", Component, method, err)
+	}
+
+	return fmt.Errorf("component %s, method %s, id %d, error %w", Component, method, *id, err)
 }
 
 // GetStatus returns status for component or error
@@ -40,21 +52,21 @@ func (t *Client) GetStatus(ctx context.Context, id int) (*Status, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, &id, err)
 	}
 
 	response := &GetStatusResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, &id, err)
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, &id, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, getErr(method, &id, fmt.Errorf("result is missing from response"))
 	}
 
 	return response.Result, nil
@@ -78,15 +90,15 @@ func (t *Client) GetConfig(ctx context.Context, id int) (*Config, error) {
 	response := &GetConfigResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, &id, err)
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, &id, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, getErr(method, &id, fmt.Errorf("result is missing from response"))
 	}
 
 	response.Result.Markup()
@@ -111,29 +123,22 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) error {
 	})
 
 	if err != nil {
-		return err
+		return getErr(method, nil, err)
 	}
 
 	response := &SetConfigResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return err
+		return getErr(method, nil, err)
 	}
 
 	if response.Error != nil {
-		return response.Error
+		return getErr(method, nil, response.Error)
 	}
 
 	if response.Result == nil {
-		return fmt.Errorf("Result is missing from response")
+		return getErr(method, nil, fmt.Errorf("result is missing from response"))
 	}
 
 	return nil
-}
-
-// Close closes messange handler
-func (t *Client) Close() {
-	if t._messageHandler != nil {
-		t._messageHandler.Close()
-	}
 }

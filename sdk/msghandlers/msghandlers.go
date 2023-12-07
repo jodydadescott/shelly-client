@@ -10,6 +10,6 @@ type Request = types.Request
 type MessageHandlerFactory = types.MessageHandlerFactory
 type MessageHandler = types.MessageHandler
 
-func NewWS(config *Config) (MessageHandlerFactory, error) {
+func NewWS(config *Config) MessageHandlerFactory {
 	return ws.New(config)
 }

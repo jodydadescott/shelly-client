@@ -10,6 +10,8 @@ type Error = types.Error
 type MessageHandlerFactory = types.MessageHandlerFactory
 type MessageHandler = types.MessageHandler
 
+type ShelllyDeviceInfo = types.ShelllyDeviceInfo
+
 type Status = types.LightStatus
 type Config = types.LightConfig
 

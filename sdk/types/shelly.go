@@ -1,9 +1,6 @@
 package types
 
 import (
-	"fmt"
-
-	"github.com/hashicorp/go-multierror"
 	"github.com/jinzhu/copier"
 )
 
@@ -184,7 +181,7 @@ func (t *ShellyConfig) Sanatize() {
 
 // DeviceInfo Shelly component top level device info
 // https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly#shellygetdeviceinfo
-type DeviceInfo struct {
+type ShelllyDeviceInfo struct {
 	Name *string `json:"name,omitempty" yaml:"name,omitempty"`
 	// ID Id of the device
 	ID *string `json:"id" yaml:"id"`
@@ -217,8 +214,8 @@ type DeviceInfo struct {
 }
 
 // Clone return copy
-func (t *DeviceInfo) Clone() *DeviceInfo {
-	c := &DeviceInfo{}
+func (t *ShelllyDeviceInfo) Clone() *ShelllyDeviceInfo {
+	c := &ShelllyDeviceInfo{}
 	copier.Copy(&c, &t)
 	return c
 }
@@ -247,7 +244,7 @@ type ShellyAuthConfig struct {
 	// Enable true if MQTT connection is enabled, false otherwise
 	Enable bool `json:"enable" yaml:"enable"`
 	// Pass password
-	Pass *string `json:"pass,omitempty" yaml:"pass,omitempty"`
+	Pass *string `json:"pass" yaml:"pass"`
 }
 
 // Clone return copy
@@ -438,188 +435,6 @@ func (t *UpdatesReport) Clone() *UpdatesReport {
 	c := &UpdatesReport{}
 	copier.Copy(&c, &t)
 	return c
-}
-
-type ShellyReport struct {
-	Auth          *ComponentReport   `json:"auth,omitempty" yaml:"auth,omitempty"`
-	TLSClientCert *ComponentReport   `json:"tls_client_cert,omitempty" yaml:"tls_client_cert,omitempty"`
-	TLSClientKey  *ComponentReport   `json:"tls_client_key,omitempty" yaml:"tls_client_key,omitempty"`
-	UserCA        *ComponentReport   `json:"user_ca,omitempty" yaml:"user_ca,omitempty"`
-	Bluetooth     *ComponentReport   `json:"ble,omitempty" yaml:"ble,omitempty"`
-	Cloud         *ComponentReport   `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Mqtt          *ComponentReport   `json:"mqtt,omitempty" yaml:"mqtt,omitempty"`
-	Ethernet      *ComponentReport   `json:"eth,omitempty" yaml:"eth,omitempty"`
-	System        *ComponentReport   `json:"sys,omitempty" yaml:"sys,omitempty"`
-	Wifi          *ComponentReport   `json:"wifi,omitempty" yaml:"wifi,omitempty"`
-	Websocket     *ComponentReport   `json:"ws,omitempty" yaml:"ws,omitempty"`
-	Light         []*ComponentReport `json:"light,omitempty" yaml:"light,omitempty"`
-	Input         []*ComponentReport `json:"input,omitempty" yaml:"input,omitempty"`
-	Switch        []*ComponentReport `json:"switch,omitempty" yaml:"switch,omitempty"`
-}
-
-// Clone return copy
-func (t *ShellyReport) Clone() *ShellyReport {
-	c := &ShellyReport{}
-	copier.Copy(&c, &t)
-	return c
-}
-
-func (t *ShellyReport) RebootRequired() bool {
-
-	if t.Bluetooth != nil {
-		if t.Bluetooth.RebootRequired != nil {
-			if *t.Bluetooth.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.Cloud != nil {
-		if t.Cloud.RebootRequired != nil {
-			if *t.Cloud.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.Mqtt != nil {
-		if t.Mqtt.RebootRequired != nil {
-			if *t.Mqtt.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.Ethernet != nil {
-		if t.Ethernet.RebootRequired != nil {
-			if *t.Ethernet.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.System != nil {
-		if t.System.RebootRequired != nil {
-			if *t.System.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.Wifi != nil {
-		if t.Wifi.RebootRequired != nil {
-			if *t.Wifi.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	if t.Websocket != nil {
-		if t.Websocket.RebootRequired != nil {
-			if *t.Websocket.RebootRequired {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-func (t *ShellyReport) Error() error {
-
-	var errors *multierror.Error
-
-	if t.Auth != nil {
-		if t.Auth.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("auth :: %v", t.Auth.Error))
-		}
-	}
-
-	if t.TLSClientCert != nil {
-		if t.TLSClientCert.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("tlsClientCert :: %v", t.TLSClientCert.Error))
-		}
-	}
-
-	if t.TLSClientKey != nil {
-		if t.TLSClientKey.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("tlsClientKey :: %v", t.TLSClientKey.Error))
-		}
-	}
-
-	if t.UserCA != nil {
-		if t.UserCA.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("userCA :: %v", t.UserCA.Error))
-		}
-	}
-
-	if t.Bluetooth != nil {
-		if t.Bluetooth.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("bluetooth :: %v", t.Bluetooth.Error))
-		}
-	}
-
-	if t.Cloud != nil {
-		if t.Cloud.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("cloud :: %v", t.Cloud.Error))
-		}
-	}
-
-	if t.Mqtt != nil {
-		if t.Mqtt.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("mqtt :: %v", t.Mqtt.Error))
-		}
-	}
-
-	if t.Ethernet != nil {
-		if t.Ethernet.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("ethernet :: %v", t.Ethernet.Error))
-		}
-	}
-
-	if t.System != nil {
-		if t.System.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("system :: %v", t.System.Error))
-		}
-	}
-
-	if t.Wifi != nil {
-		if t.Wifi.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("wifi :: %v", t.Wifi.Error))
-		}
-	}
-
-	if t.Websocket != nil {
-		if t.Websocket.Error != nil {
-			errors = multierror.Append(errors, fmt.Errorf("websocket :: %v", t.Websocket.Error))
-		}
-	}
-
-	if t.Light != nil {
-		for _, v := range t.Light {
-			if v.Error != nil {
-				errors = multierror.Append(errors, fmt.Errorf("light %d :: %v", v.ID, v.Error))
-			}
-		}
-	}
-
-	if t.Input != nil {
-		for _, v := range t.Input {
-			if v.Error != nil {
-				errors = multierror.Append(errors, fmt.Errorf("input %d :: %v", v.ID, v.Error))
-			}
-		}
-	}
-
-	if t.Switch != nil {
-		for _, v := range t.Switch {
-			if v.Error != nil {
-				errors = multierror.Append(errors, fmt.Errorf("switch %d :: %v", v.ID, v.Error))
-			}
-		}
-	}
-
-	return errors.ErrorOrNil()
 }
 
 type ComponentReport struct {

@@ -29,11 +29,10 @@ type LightConfig = types.LightConfig
 type MqttStatus = types.MqttStatus
 type MqttConfig = types.MqttConfig
 type ShellyStatus = types.ShellyStatus
-type ShellyReport = types.ShellyReport
 type ComponentReport = types.ComponentReport
 type ShellyRPCMethods = types.ShellyRPCMethods
 type ShellyConfig = types.ShellyConfig
-type DeviceInfo = types.DeviceInfo
+type ShelllyDeviceInfo = types.ShelllyDeviceInfo
 type ShellyUpdateConfig = types.ShellyUpdateConfig
 type ShellyAuthConfig = types.ShellyAuthConfig
 type ShellyUserCAConfig = types.ShellyUserCAConfig
@@ -99,7 +98,7 @@ type GetStatusResponse struct {
 // DeviceInfoResponse internal use only
 type DeviceInfoResponse struct {
 	Response
-	Result *DeviceInfo `json:"result,omitempty"`
+	Result *ShelllyDeviceInfo `json:"result,omitempty"`
 }
 
 // CheckForUpdateResponse Shelly component object
@@ -370,13 +369,13 @@ func (t *RawShellyConfig) convert() *ShellyConfig {
 type RawShellyAuthConfig struct {
 	// User is used by the following methods:
 	// SetAuth: Must be set to admin. Only one user is supported. Required
-	User string `json:"user,omitempty" yaml:"user,omitempty"`
+	User *string `json:"user" yaml:"user"`
 	// Realm is used by the following methods:
 	// SetAuth : Must be the id of the device. Only one realm is supported. Required
-	Realm string `json:"realm,omitempty" yaml:"realm,omitempty"`
+	Realm *string `json:"realm" yaml:"realm"`
 	// Ha1 is used by the following methods:
 	// SetAuth : "user:realm:password" encoded in SHA256 (null to disable authentication). Required
-	Ha1 string `json:"ha1,omitempty" yaml:"ha1,omitempty"`
+	Ha1 *string `json:"ha1" yaml:"ha1"`
 }
 
 // RawShellyTLSConfig internal use only
@@ -385,7 +384,7 @@ type RawShellyTLSConfig struct {
 	// PutUserCA : Contents of the PEM file (null if you want to delete the existing data). Required
 	// PutTLSClientCert : Contents of the client.crt file (null if you want to delete the existing data). Required
 	// PutTLSClientKey : Contents of the client.key file (null if you want to delete the existing data). Required
-	Data *string `json:"data,omitempty" yaml:"data,omitempty"`
+	Data *string `json:"data" yaml:"data"`
 	// Append is used by the following methods:
 	// PutUserCA : true if more data will be appended afterwards, default false.
 	// PutTLSClientCert : true if more data will be appended afterwards, default false

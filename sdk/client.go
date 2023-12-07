@@ -49,22 +49,15 @@ type Client struct {
 	types.MessageHandlerFactory
 }
 
-func New(config *Config) (*Client, error) {
-
-	messageHandlerFactory, err := msghandlers.NewWS(&msghandlers.Config{
-		Hostname:    config.Hostname,
-		Password:    config.Password,
-		Username:    types.ShellyUser,
-		SendTimeout: config.SendTimeout,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
+func New(config *Config) *Client {
 	return &Client{
-		MessageHandlerFactory: messageHandlerFactory,
-	}, nil
+		MessageHandlerFactory: msghandlers.NewWS(&msghandlers.Config{
+			Hostname:    config.Hostname,
+			Password:    config.Password,
+			Username:    types.ShellyUser,
+			SendTimeout: config.SendTimeout,
+		}),
+	}
 }
 
 func (t *Client) System() *system.Client {
@@ -145,52 +138,6 @@ func (t *Client) Websocket() *websocket.Client {
 }
 
 func (t *Client) Close() {
-
 	zap.L().Debug("(*Client) Close()")
-
-	if t._system != nil {
-		t._system.Close()
-	}
-
-	if t._shelly != nil {
-		t._shelly.Close()
-	}
-
-	if t._wifi != nil {
-		t._wifi.Close()
-	}
-
-	if t._bluetooth != nil {
-		t._bluetooth.Close()
-	}
-
-	if t._mqtt != nil {
-		t._mqtt.Close()
-	}
-
-	if t._cloud != nil {
-		t._cloud.Close()
-	}
-
-	if t._switch != nil {
-		t._switch.Close()
-	}
-
-	if t._light != nil {
-		t._light.Close()
-	}
-
-	if t._input != nil {
-		t._input.Close()
-	}
-
-	if t._websocket != nil {
-		t._websocket.Close()
-	}
-
-	if t._ethernet != nil {
-		t._ethernet.Close()
-	}
-
 	t.MessageHandlerFactory.Close()
 }

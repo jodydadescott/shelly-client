@@ -24,8 +24,15 @@ func (t *Client) getMessageHandler() MessageHandler {
 		return t._messageHandler
 	}
 
-	t._messageHandler = t.NewHandle()
+	t._messageHandler = t.NewHandle(Component)
 	return t._messageHandler
+}
+
+func getErr(method string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("component %s, method %s, error %w", Component, method, err)
 }
 
 // GetStatus returns status for component or error
@@ -38,7 +45,7 @@ func (t *Client) GetStatus(ctx context.Context) (*Status, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	response := &GetStatusResponse{}
@@ -48,11 +55,11 @@ func (t *Client) GetStatus(ctx context.Context) (*Status, error) {
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	return response.Result, nil
@@ -68,21 +75,21 @@ func (t *Client) GetConfig(ctx context.Context) (*Config, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	response := &GetConfigResponse{}
 	err = json.Unmarshal(respBytes, response)
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	response.Result.Markup()
@@ -107,7 +114,7 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, getErr(method, err)
 	}
 
 	response := &SetConfigResponse{}
@@ -117,11 +124,11 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 	}
 
 	if response.Error != nil {
-		return nil, response.Error
+		return nil, getErr(method, response.Error)
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
 	rebootRequired := false
@@ -133,11 +140,4 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 	}
 
 	return &rebootRequired, nil
-}
-
-// Close closes messange handler
-func (t *Client) Close() {
-	if t._messageHandler != nil {
-		t._messageHandler.Close()
-	}
 }

@@ -1,10 +1,8 @@
-package light
+package mqtt
 
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
@@ -13,11 +11,6 @@ import (
 	"github.com/jodydadescott/shelly-client/cmd/util"
 	sdkclient "github.com/jodydadescott/shelly-client/sdk"
 	sdktypes "github.com/jodydadescott/shelly-client/sdk/types"
-)
-
-var (
-	truePointer  = true
-	falsePointer = false
 )
 
 type Config = types.Config
@@ -34,65 +27,13 @@ type callback interface {
 	WriteStdout(input any) error
 }
 
+// {"src":"shellypluswdus-441793ccc4d0","dst":"shelly/events","method":"NotifyStatus","params":{"ts":1701980272.34,"light:0":{"id":0,"brightness":3.00,"output":false,"source":"ui"}}}
+
 func New(t callback) *cobra.Command {
 
-	var brightnessArg string
-
-	getBrightness := func() (*float64, error) {
-
-		if brightnessArg == "" {
-			return nil, fmt.Errorf("brightness arg not set")
-		}
-
-		brightness, err := strconv.ParseFloat(brightnessArg, 32)
-		if err != nil {
-			return nil, err
-		}
-
-		return &brightness, nil
-	}
-
-	getIds := func(ctx context.Context, shellyClient *ShellyClient, args []string) ([]int, error) {
-
-		if len(args) == 0 {
-			return nil, fmt.Errorf("one or more IDs is required. They can be space of comma delineated. You can also use 'all'")
-		}
-
-		var results []int
-
-		if len(args) == 1 {
-			if strings.ToLower(args[0]) == "all" {
-
-				shellyConfig, err := shellyClient.Shelly().GetConfig(ctx)
-				if err != nil {
-					return nil, err
-				}
-				for _, lightConfig := range shellyConfig.Light {
-					results = append(results, lightConfig.ID)
-				}
-				return results, nil
-			}
-		}
-
-		var errors *multierror.Error
-
-		for _, arg := range args {
-			for _, sub := range strings.Split((strings.TrimSpace(arg)), ",") {
-				id, err := strconv.Atoi(sub)
-				if err != nil {
-					errors = multierror.Append(errors, err)
-				} else {
-					results = append(results, id)
-				}
-			}
-		}
-
-		return results, errors.ErrorOrNil()
-	}
-
 	rootCmd := &cobra.Command{
-		Use:   "light",
-		Short: "Turn light on, off, or set brigtness level",
+		Use:   "mqtt",
+		Short: "Poles all ",
 	}
 
 	setOnCmd := &cobra.Command{
@@ -264,48 +205,6 @@ func New(t callback) *cobra.Command {
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
-
-	// statusCmd := &cobra.Command{
-	// 	Use:   "status",
-	// 	Short: "Returns status of light",
-	// 	RunE: func(cmd *cobra.Command, args []string) error {
-
-	// 		config, err := t.GetConfig()
-	// 		if err != nil {
-	// 			return err
-	// 		}
-
-	// 		ctx, cancel := t.GetCTX()
-	// 		defer cancel()
-
-	// 		action := "set on"
-
-	// 		do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
-
-	// 			ids, err := getIds(ctx, client, args)
-	// 			if err != nil {
-	// 				return err
-	// 			}
-
-	// 			var errors *multierror.Error
-
-	// 			for _, id := range ids {
-	// 				err := client.Light().Set(ctx, id, &truePointer, nil)
-	// 				if err != nil {
-	// 					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s, lightID %d: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, id, action, err.Error()))
-	// 					errors = multierror.Append(errors, err)
-	// 				} else {
-	// 					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s, lightID %d: [%s] completed", hostname, *deviceInfo.ID, *deviceInfo.App, id, action))
-	// 				}
-	// 			}
-
-	// 			return errors.ErrorOrNil()
-
-	// 		}
-
-	// 		return util.Process(ctx, config, action, false, do)
-	// 	},
-	// }
 
 	rootCmd.AddCommand(toggleCmd, setOnCmd, setOffCmd, setBrightnessCmd)
 	return rootCmd
