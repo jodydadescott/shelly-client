@@ -16,42 +16,48 @@ import (
 	"github.com/hokaccha/go-prettyjson"
 
 	logger "github.com/jodydadescott/jody-go-logger"
+	"github.com/jodydadescott/openhab-go-sdk"
 	"github.com/jodydadescott/unifi-go-sdk"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	"github.com/jodydadescott/shelly-client/cmd/light"
+	"github.com/jodydadescott/shelly-client/cmd/mqtt"
 	"github.com/jodydadescott/shelly-client/cmd/switchx"
 	"github.com/jodydadescott/shelly-client/cmd/types"
 	"github.com/jodydadescott/shelly-client/cmd/util"
-	sdkclient "github.com/jodydadescott/shelly-client/sdk"
-	"github.com/jodydadescott/shelly-client/sdk/shelly"
-	sdktypes "github.com/jodydadescott/shelly-client/sdk/types"
+	sdk_client "github.com/jodydadescott/shelly-client/sdk/client"
+	sdk_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
-type ShellyDeviceInfo = sdktypes.ShelllyDeviceInfo
-type ShellyDeviceStatus = sdktypes.ShellyStatus
-type ShellyConfig = sdktypes.ShellyConfig
-
-type ShellyClient = sdkclient.Client
+type ShellyDeviceInfo = shelly_types.DeviceInfo
+type ShellyStatus = shelly_types.Status
+type ShellyConfig = sdk_types.Config
+type ShellyClient = sdk_client.Client
+type ShellyUpdateConfig = shelly_types.UpdateConfig
+type ShellyRPCMethods = shelly_types.RPCMethods
+type ShellyUpdateReport = shelly_types.UpdatesReport
 
 type Config = types.Config
-
 type UnifiConfig = unifi.Config
+type Logger = logger.Config
 
 type Cmd struct {
 	ctx context.Context
 	*cobra.Command
-	configFileArg  string
-	hostnameArg    []string
-	passwordArg    string
-	outputArg      string
-	urlArg         string
-	timeoutArg     string
-	debugLevelArg  string
-	unifiArg       string
-	rebootForceArg bool
+	configFileArg     string
+	hostnameArg       []string
+	passwordArg       string
+	outputArg         string
+	urlArg            string
+	timeoutArg        string
+	debugLevelArg     string
+	unifiArg          string
+	openhabArg        string
+	rebootForceArg    bool
+	setConfigForceArg bool
 }
 
 func NewCmd() *Cmd {
@@ -83,243 +89,367 @@ func NewCmd() *Cmd {
 		SilenceUsage: true,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get",
-		Short: "Returns specified config, status or info for device",
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manages device(s) configuration",
 	}
 
 	getConfigCmd := &cobra.Command{
-		Use:   "config",
-		Short: "Returns device config",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if len(config.Hostnames) != 1 {
-				return fmt.Errorf("one and only one hostname is required for this command")
-			}
-
-			client := util.NewShellyClient(config, config.Hostnames[0]).Shelly()
-			defer client.Close()
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			result, err := client.GetConfig(ctx)
-			if err != nil {
-				return err
-			}
-
-			return t.WriteStdout(result)
-		},
-	}
-
-	getStatusCmd := &cobra.Command{
-		Use:   "status",
-		Short: "Returns device status",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if len(config.Hostnames) != 1 {
-				return fmt.Errorf("one and only one hostname is required for this command")
-			}
-
-			client := util.NewShellyClient(config, config.Hostnames[0]).Shelly()
-			defer client.Close()
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			result, err := client.GetStatus(ctx)
-			if err != nil {
-				return err
-			}
-
-			return t.WriteStdout(result)
-		},
-	}
-
-	getInfoCmd := &cobra.Command{
-		Use:   "info",
-		Short: "Returns device info",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if len(config.Hostnames) != 1 {
-				return fmt.Errorf("one and only one hostname is required for this command")
-			}
-
-			client := util.NewShellyClient(config, config.Hostnames[0]).Shelly()
-			defer client.Close()
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			result, err := client.GetDeviceInfo(ctx)
-			if err != nil {
-				return err
-			}
-
-			return t.WriteStdout(result)
-		},
-	}
-
-	getMethodsCmd := &cobra.Command{
-		Use:   "methods",
-		Short: "Returns RPC methods for device",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if len(config.Hostnames) != 1 {
-				return fmt.Errorf("one and only one hostname is required for this command")
-			}
-
-			client := util.NewShellyClient(config, config.Hostnames[0]).Shelly()
-			defer client.Close()
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			result, err := client.ListMethods(ctx)
-			if err != nil {
-				return err
-			}
-
-			return t.WriteStdout(result)
-		},
-	}
-
-	getUpdatesCmd := &cobra.Command{
-		Use:   "updates",
-		Short: "Returns available firmware updates for device",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if len(config.Hostnames) != 1 {
-				return fmt.Errorf("one and only one hostname is required for this command")
-			}
-
-			client := util.NewShellyClient(config, config.Hostnames[0]).Shelly()
-			defer client.Close()
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			result, err := client.CheckForUpdate(ctx)
-			if err != nil {
-				return err
-			}
-
-			return t.WriteStdout(result)
-		},
-	}
-
-	getCmd.AddCommand(getConfigCmd, getStatusCmd, getInfoCmd, getMethodsCmd, getUpdatesCmd)
-
-	unifiCmd := &cobra.Command{
-		Use:   "unifi",
-		Short: "Ubiquiti Networks",
-	}
-
-	unifiGetCmd := &cobra.Command{
 		Use:   "get",
-		Short: "Returns list of Shelly device hostname(s)",
+		Short: "Returns device config for specified device(s)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			if config.Unifi == nil {
-				return fmt.Errorf("config.Unifi is required")
-			}
-
-			hostnames, err := getUnifiHostnames(config.Unifi)
-			if err != nil {
-				return err
-			}
-
-			for _, hostname := range hostnames {
-				err := t.WriteStdout(hostname)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		},
-	}
-
-	unifiCmd.AddCommand(unifiGetCmd)
-
-	updateCmd := &cobra.Command{
-		Use:   "update",
-		Short: "Updates firmware",
-	}
-
-	updateStableCmd := &cobra.Command{
-		Use:   "stable",
-		Short: "Updates devices(s) firmware to latest stable",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
-			if err != nil {
-				return err
-			}
-
-			stage := "beta"
-			action := fmt.Sprintf("update to %s", stage)
-
-			params := &shelly.ShellyUpdateConfig{
-				Stage: &stage,
-			}
-
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
-
-				err := client.Shelly().Update(ctx, params)
-
-				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
-					return err
-				}
-
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
-				return nil
-			}
 
 			ctx, cancel := t.GetCTX()
 			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) != 1 {
+				return fmt.Errorf("one and only one hostname is required for this command")
+			}
+
+			client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+			defer client.Close()
+
+			result, err := client.GetConfig(ctx, false)
+			if err != nil {
+				return err
+			}
+
+			return t.WriteStdout(result)
+		},
+	}
+
+	compareConfigCmd := &cobra.Command{
+		Use:   "compare",
+		Short: "Returns OS code 0 if the running config matches the config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) != 1 {
+				return fmt.Errorf("one and only one hostname is required for this command")
+			}
+
+			client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+			defer client.Close()
+
+			runningConfig, err := client.GetConfig(ctx, false)
+			if err != nil {
+				return err
+			}
+
+			renderedConfig, err := sdk_client.GetConfig(ctx, client)
+			if err != nil {
+				return err
+			}
+
+			runningConfig.Sanatize()
+			renderedConfig.Sanatize()
+
+			if runningConfig.Equals(renderedConfig) {
+				return t.WriteStdout("EQUAL")
+			}
+
+			return t.WriteStdout("NOT EQUAL")
+		},
+	}
+
+	setConfigCmd := &cobra.Command{
+		Use:   "set",
+		Short: "Sets specified config for device(s)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			action := "set config"
+
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
+
+				shellyConfig, err := sdk_client.GetConfig(ctx, client)
+				if err != nil {
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					return err
+				}
+
+				if t.setConfigForceArg {
+					zap.L().Debug(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] set config force is true", hostname, *deviceInfo.ID, *deviceInfo.App, action))
+				}
+
+				configReport, err := client.SetConfig(ctx, shellyConfig, t.setConfigForceArg)
+				if err != nil {
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					return err
+				}
+
+				if configReport.NoChange {
+					return t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] no change in config", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				}
+
+				if configReport.RebootRequired {
+					return t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed and rebooted", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				}
+
+				return t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+			}
 
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
 
-	updateBetaCmd := &cobra.Command{
-		Use:   "beta",
+	setConfigCmd.PersistentFlags().BoolVarP(&t.setConfigForceArg, "force", "f", false, "config will not be set if there are no changes; this flag forces set config")
+
+	renderConfigCmd := &cobra.Command{
+		Use:   "render",
+		Short: "Shows the rendered config for the target device(s). This can be used to create desired config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) != 1 {
+				return fmt.Errorf("one and only one hostname is required for this command")
+			}
+
+			client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+			defer client.Close()
+
+			shellyConfig, err := sdk_client.GetConfig(ctx, client)
+			if err != nil {
+				return err
+			}
+
+			return t.WriteStdout(shellyConfig)
+		},
+	}
+
+	configCmd.AddCommand(getConfigCmd, setConfigCmd, renderConfigCmd, compareConfigCmd)
+
+	infoCmd := &cobra.Command{
+		Use:   "info",
+		Short: "Returns device(s) information",
+	}
+
+	infoStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Returns device status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			if len(config.Hostnames) == 1 {
+				client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+				defer client.Close()
+
+				result, err := client.GetStatus(ctx)
+				if err != nil {
+					return err
+				}
+
+				return t.WriteStdout(result)
+			}
+
+			var results []*ShellyStatus
+
+			for _, hostname := range config.Hostnames {
+				client := util.NewShellyClient(config, util.CleanupHostname(hostname))
+				defer client.Close()
+				result, err := client.GetStatus(ctx)
+				if err != nil {
+					return err
+				}
+				results = append(results, result)
+			}
+
+			return t.WriteStdout(results)
+		},
+	}
+
+	devInfoCmd := &cobra.Command{
+		Use:   "dev",
+		Short: "Returns device info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			if len(config.Hostnames) == 1 {
+				client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+				defer client.Close()
+
+				result, err := client.GetDeviceInfo(ctx)
+				if err != nil {
+					return err
+				}
+
+				return t.WriteStdout(result)
+			}
+
+			var results []*ShellyDeviceInfo
+
+			for _, hostname := range config.Hostnames {
+				client := util.NewShellyClient(config, util.CleanupHostname(hostname))
+				defer client.Close()
+				result, err := client.GetDeviceInfo(ctx)
+				if err != nil {
+					return err
+				}
+				results = append(results, result)
+			}
+
+			return t.WriteStdout(results)
+		},
+	}
+
+	methodsInfoCmd := &cobra.Command{
+		Use:   "methods",
+		Short: "Returns RPC methods for device",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			if len(config.Hostnames) == 1 {
+				client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+				defer client.Close()
+
+				result, err := client.ListMethods(ctx)
+				if err != nil {
+					return err
+				}
+
+				return t.WriteStdout(result)
+			}
+
+			var results []*ShellyRPCMethods
+
+			for _, hostname := range config.Hostnames {
+				client := util.NewShellyClient(config, util.CleanupHostname(hostname))
+				defer client.Close()
+				result, err := client.ListMethods(ctx)
+				if err != nil {
+					return err
+				}
+				results = append(results, result)
+			}
+
+			return t.WriteStdout(results)
+		},
+	}
+
+	infoCmd.AddCommand(infoStatusCmd, devInfoCmd, methodsInfoCmd)
+
+	firmwareCmd := &cobra.Command{
+		Use:   "firmware",
+		Short: "Manages device(s) firmware (updates)",
+	}
+
+	availableFirmwareCmd := &cobra.Command{
+		Use:   "available",
+		Short: "Returns available updates for specified device",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			if len(config.Hostnames) == 1 {
+				client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
+				defer client.Close()
+
+				result, err := client.CheckForUpdate(ctx)
+				if err != nil {
+					return err
+				}
+
+				return t.WriteStdout(result)
+			}
+
+			var results []*ShellyUpdateReport
+
+			for _, hostname := range config.Hostnames {
+				client := util.NewShellyClient(config, util.CleanupHostname(hostname))
+				defer client.Close()
+				result, err := client.CheckForUpdate(ctx)
+				if err != nil {
+					return err
+				}
+				results = append(results, result)
+			}
+
+			return t.WriteStdout(results)
+		},
+	}
+
+	updateStableFirmwareCmd := &cobra.Command{
+		Use:   "update-stable",
 		Short: "Updates devices(s) firmware to latest stable",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
@@ -331,38 +461,83 @@ func NewCmd() *Cmd {
 			stage := "beta"
 			action := fmt.Sprintf("update to %s", stage)
 
-			params := &shelly.ShellyUpdateConfig{
+			params := &ShellyUpdateConfig{
 				Stage: &stage,
 			}
 
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
 
-				err := client.Shelly().Update(ctx, params)
+				err := client.Update(ctx, params)
 
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
 
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
 				return nil
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
 
-	updateURLCmd := &cobra.Command{
-		Use:   "url",
+	updateBetaFirmwareCmd := &cobra.Command{
+		Use:   "update-beta",
+		Short: "Updates devices(s) firmware to latest stable",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
+			}
+
+			stage := "beta"
+			action := fmt.Sprintf("update to %s", stage)
+
+			params := &ShellyUpdateConfig{
+				Stage: &stage,
+			}
+
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
+
+				err := client.Update(ctx, params)
+
+				if err != nil {
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					return err
+				}
+
+				t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				return nil
+			}
+
+			return util.Process(ctx, config, action, false, do)
+		},
+	}
+
+	updateURLFirmwareCmd := &cobra.Command{
+		Use:   "update-url",
 		Short: "Updates device(s) firmware to specified URL",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
+			}
+
+			if len(config.Hostnames) == 0 {
+				return fmt.Errorf("one or more hostnames required")
 			}
 
 			if config.UpdateURL == nil {
@@ -379,35 +554,32 @@ func NewCmd() *Cmd {
 
 			action := fmt.Sprintf("update with url %s", url)
 
-			params := &shelly.ShellyUpdateConfig{
+			params := &ShellyUpdateConfig{
 				Url: &url,
 			}
 
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
 
-				err := client.Shelly().Update(ctx, params)
+				err := client.Update(ctx, params)
 
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
 
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
 				return nil
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
 
-	updateCmd.AddCommand(updateStableCmd, updateBetaCmd, updateURLCmd)
+	firmwareCmd.AddCommand(availableFirmwareCmd, updateStableFirmwareCmd, updateBetaFirmwareCmd, updateURLFirmwareCmd)
 
-	doCmd := &cobra.Command{
-		Use:  "do",
-		Long: "Executes actions on specified device(s)",
+	resetCmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Reboots, Factory Resets or Wifi Resets specified device(s)",
 	}
 
 	rebootCmd := &cobra.Command{
@@ -415,14 +587,17 @@ func NewCmd() *Cmd {
 		Short: "Reboots device(s)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
 
 			action := "reboot"
 
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
 
 				isRestartRequired := func() bool {
 
@@ -456,21 +631,18 @@ func NewCmd() *Cmd {
 				}
 
 				if !restart() {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] not required", hostname, *deviceInfo.ID, *deviceInfo.App, action))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] not required", hostname, *deviceInfo.ID, *deviceInfo.App, action))
 					return nil
 				}
 
-				err := client.Shelly().Reboot(ctx)
+				err := client.Reboot(ctx)
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
 
 				return nil
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			return util.Process(ctx, config, action, true, do)
 		},
@@ -484,29 +656,29 @@ func NewCmd() *Cmd {
 		Short: "Resets device(s) to factory settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
 
 			action := "factory reset"
 
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
 
-				err := client.Shelly().FactoryReset(ctx)
+				err := client.FactoryReset(ctx)
 
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
 
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
 				return nil
 
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			return util.Process(ctx, config, action, false, do)
 		},
@@ -518,159 +690,229 @@ func NewCmd() *Cmd {
 		Short: "Resets device(s) Wifi config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
 
 			action := "reset wifi"
 
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
+			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyStatus) error {
 
-				err := client.Shelly().ResetWiFiConfig(ctx)
+				err := client.ResetWiFiConfig(ctx)
 
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
+					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
 
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
+				t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
 				return nil
 
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
 
-	doCmd.AddCommand(rebootCmd, factoryResetCmd, resetWifiConfigCmd)
+	resetCmd.AddCommand(rebootCmd, factoryResetCmd, resetWifiConfigCmd)
 
-	setCmd := &cobra.Command{
-		Use: "set",
+	listHostnamesCmd := &cobra.Command{
+		Use:   "list-hostnames",
+		Short: "Returns list of Shelly hostnames",
 	}
 
-	setConfigCmd := &cobra.Command{
-		Use:   "config",
-		Short: "Sets specified config for device",
+	unifiListHostnamesCmd := &cobra.Command{
+		Use:   "unifi",
+		Short: "Returns list of Shelly hostnames from Ubiquiti controller",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
 
-			if len(config.Hostnames) == 0 {
-				return fmt.Errorf("one or more hostnames required")
+			if config.Unifi == nil {
+				return fmt.Errorf("config.Unifi is required")
 			}
 
-			action := "set config"
-
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
-
-				getConfig := func() *ShellyConfig {
-
-					shellyConfig := config.GetMatchingShellyConfig(*deviceInfo.ID)
-					if shellyConfig != nil {
-						zap.L().Debug(fmt.Sprintf("Using config %s based on matching ID", *deviceInfo.ID))
-						return shellyConfig
-					}
-
-					shellyConfig = config.GetMatchingShellyConfig(*deviceInfo.App)
-					if shellyConfig != nil {
-						zap.L().Debug(fmt.Sprintf("Using config %s based on matching App", *deviceInfo.App))
-						return shellyConfig
-					}
-
-					shellyConfig = config.GetMatchingShellyConfig("default")
-					if shellyConfig != nil {
-						zap.L().Debug("Using default config")
-						return shellyConfig
-					}
-
-					return nil
-				}
-
-				shellyConfig := getConfig()
-				if shellyConfig == nil {
-					return fmt.Errorf("no matching config found")
-				}
-
-				err := client.Shelly().SetConfig(ctx, shellyConfig, deviceInfo)
-
-				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
-					return err
-				}
-
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
-				return nil
-			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
-
-			return util.Process(ctx, config, action, false, do)
-		},
-	}
-
-	exampleCmd := &cobra.Command{
-		Use:   "example",
-		Short: "writes example to STDOUT",
-		RunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := t.GetConfig()
+			hostnames, err := util.GetUnifiHostnames(config.Unifi)
 			if err != nil {
 				return err
 			}
 
-			if len(config.Hostnames) == 0 {
-				return fmt.Errorf("one or more hostnames required")
-			}
-
-			action := "example"
-
-			result := types.ExampleConfig()
-
-			do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
-				deviceConfig, err := client.Shelly().GetConfig(ctx)
+			for _, hostname := range hostnames {
+				err := t.WriteStdout(hostname)
 				if err != nil {
-					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
 				}
-
-				t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] completed", hostname, *deviceInfo.ID, action, *deviceInfo.App))
-
-				result.AddShellyConfig(*deviceInfo.App, deviceConfig)
-				return nil
 			}
+
+			return nil
+		},
+	}
+
+	openHabListHostnamesCmd := &cobra.Command{
+		Use:   "openhab",
+		Short: "Returns list of Shelly hostnames from Ubiquiti controller",
+		RunE: func(cmd *cobra.Command, args []string) error {
 
 			ctx, cancel := t.GetCTX()
 			defer cancel()
 
-			defer t.WriteStdout(result)
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
 
-			return util.Process(ctx, config, action, false, do)
+			if config.OpenHAB == nil {
+				return fmt.Errorf("config.OpenHAB is required")
+			}
+
+			hostnames, err := util.GetOpenHABHostnames(ctx, config.OpenHAB)
+			if err != nil {
+				return err
+			}
+
+			for _, hostname := range hostnames {
+				err := t.WriteStdout(hostname)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
 		},
 	}
 
-	setCmd.AddCommand(setConfigCmd)
+	listHostnamesCmd.AddCommand(unifiListHostnamesCmd, openHabListHostnamesCmd)
+
+	diffHostnamesCmd := &cobra.Command{
+		Use:   "diff-hostnames",
+		Short: "Returns list of Shelly hostnames that are present in one system but not the other",
+	}
+
+	openHabUnifiDiffHostnamesCmd := &cobra.Command{
+		Use:   "openhab-unifi",
+		Short: "Shows hostnames present in OpenHAB and not in Unifi",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if config.OpenHAB == nil {
+				return fmt.Errorf("config.OpenHAB is required")
+			}
+
+			if config.OpenHAB == nil {
+				return fmt.Errorf("config.OpenHAB is required")
+			}
+
+			openhabHostnames, err := util.GetOpenHABHostnames(ctx, config.OpenHAB)
+			if err != nil {
+				return err
+			}
+
+			unifiHostnames, err := util.GetUnifiHostnames(config.Unifi)
+			if err != nil {
+				return err
+			}
+
+			has := func(hostname string) bool {
+				for _, h := range unifiHostnames {
+					if hostname == h {
+						return true
+					}
+				}
+				return false
+			}
+
+			for _, h := range openhabHostnames {
+				if !has(h) {
+					t.WriteStdout(h)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	unifiOpenHabDiffHostnamesCmd := &cobra.Command{
+		Use:   "unifi-openhab",
+		Short: "Shows hostnames present in Unifi and not in OpenHAB",
+		RunE: func(cmd *cobra.Command, args []string) error {
+
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
+			if err != nil {
+				return err
+			}
+
+			if config.OpenHAB == nil {
+				return fmt.Errorf("config.OpenHAB is required")
+			}
+
+			if config.OpenHAB == nil {
+				return fmt.Errorf("config.OpenHAB is required")
+			}
+
+			openhabHostnames, err := util.GetOpenHABHostnames(ctx, config.OpenHAB)
+			if err != nil {
+				return err
+			}
+
+			unifiHostnames, err := util.GetUnifiHostnames(config.Unifi)
+			if err != nil {
+				return err
+			}
+
+			has := func(hostname string) bool {
+				for _, h := range openhabHostnames {
+					if hostname == h {
+						return true
+					}
+				}
+				return false
+			}
+
+			for _, h := range unifiHostnames {
+				if !has(h) {
+					t.WriteStdout(h)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	diffHostnamesCmd.AddCommand(openHabUnifiDiffHostnamesCmd, unifiOpenHabDiffHostnamesCmd)
 
 	// Override the default help so we can use the -h for host
 	rootCmd.PersistentFlags().BoolP("help", "", false, "help for this command")
 
-	rootCmd.PersistentFlags().StringVarP(&t.debugLevelArg, "debug", "D", "", fmt.Sprintf("debug level (TRACE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", DebugEnvVar))
+	rootCmd.PersistentFlags().StringVarP(&t.debugLevelArg, "debug", "D", "", fmt.Sprintf("debug level (WIRE, DEBUG, INFO, WARN, ERROR) to STDERR; env var is %s", DebugEnvVar))
 	rootCmd.PersistentFlags().StringVarP(&t.configFileArg, "config", "c", "", fmt.Sprintf("Config; optionally use env var '%s'", ShellyConfigEnvVar))
 	rootCmd.PersistentFlags().StringSliceVarP(&t.hostnameArg, "hostname", "h", []string{}, fmt.Sprintf("Hostname; optionally use env var '%s'", ShellyHostnameEnvVar))
 	rootCmd.PersistentFlags().StringVarP(&t.passwordArg, "password", "p", "", fmt.Sprintf("Password; optionally use env var '%s'", ShellyPasswordEnvVar))
 	rootCmd.PersistentFlags().StringVar(&t.passwordArg, "update-url", "", fmt.Sprintf("Password; optionally use env var '%s'", ShellyURLEnvVar))
 	rootCmd.PersistentFlags().StringVarP(&t.outputArg, "output", "o", ShellyOutputDefault, fmt.Sprintf("Output format. One of: prettyjson | json | jsonpath | yaml ; Optionally use env var '%s'", ShellyOutputEnvVar))
 	rootCmd.PersistentFlags().StringVarP(&t.timeoutArg, "timeout", "t", "", "The timeout in seconds for the websocket call to the device")
-	rootCmd.PersistentFlags().StringVar(&t.unifiArg, "unifi", "", "Use Unifi controller to get hostname(s). Must be enable or disable")
-	rootCmd.AddCommand(getCmd, setCmd, doCmd, updateCmd, exampleCmd, unifiCmd, light.New(t), switchx.New(t))
-
+	rootCmd.PersistentFlags().StringVar(&t.unifiArg, "unifi", "", "Use Unifi controller to get hostname(s). Must be enable, disable, true, or false")
+	rootCmd.PersistentFlags().StringVar(&t.openhabArg, "openhab", "", "Use Openhab controller to get hostname(s). Must be enable, disable, true, or false")
+	rootCmd.AddCommand(configCmd, infoCmd, resetCmd, firmwareCmd, listHostnamesCmd, diffHostnamesCmd, light.New(t), switchx.New(t), mqtt.New(t))
 	t.Command = rootCmd
 
 	return t
@@ -783,7 +1025,6 @@ func (t *Cmd) anyToOut(input any) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Println(strings.TrimSpace(string(data)))
 		return fmt.Sprint(strings.TrimSpace(string(data))), err
 
 	}
@@ -824,7 +1065,7 @@ func (t *Cmd) GetCTX() (context.Context, context.CancelFunc) {
 	return context.WithCancel(t.ctx)
 }
 
-func (t *Cmd) GetConfig() (*Config, error) {
+func (t *Cmd) GetConfig(ctx context.Context) (*Config, error) {
 
 	var config *Config
 
@@ -967,6 +1208,25 @@ func (t *Cmd) GetConfig() (*Config, error) {
 		return true
 	}
 
+	loadBase := func() error {
+
+		if t.outputArg != "" {
+			config.Output = &t.outputArg
+			zap.L().Debug(fmt.Sprintf("Output %s loaded from args", t.outputArg))
+		}
+
+		if t.timeoutArg != "" {
+			timeout, err := time.ParseDuration(t.timeoutArg)
+			if err != nil {
+				return err
+			}
+			config.Timeout = &timeout
+			zap.L().Debug(fmt.Sprintf("Timeout %s loaded from args", t.timeoutArg))
+		}
+
+		return nil
+	}
+
 	loadHostnames := func() {
 
 		if len(t.hostnameArg) > 0 {
@@ -997,12 +1257,12 @@ func (t *Cmd) GetConfig() (*Config, error) {
 						return
 					}
 					zap.L().Debug(fmt.Sprintf("hostnames %s in config overwritten by %s from envvar %s", config.Hostnames, hostnames, ShellyHostnameEnvVar))
-					config.Hostnames = t.hostnameArg
+					config.Hostnames = hostnames
 					return
 				}
 
 				zap.L().Debug(fmt.Sprintf("hostnames is %s from envvar %s", hostnames, ShellyHostnameEnvVar))
-				config.Hostnames = t.hostnameArg
+				config.Hostnames = hostnames
 				return
 			}
 
@@ -1016,44 +1276,48 @@ func (t *Cmd) GetConfig() (*Config, error) {
 		zap.L().Debug(fmt.Sprintf("Hostnames not set in arg, envvar %s or config", ShellyHostnameEnvVar))
 	}
 
-	loadPassword := func() {
+	loadShelly := func() {
+
+		if config.Shelly == nil {
+			config.Shelly = &ShellyConfig{}
+		}
 
 		x := t.passwordArg
 		if x != "" {
-			if config.Password != nil {
-				if *config.Password == x {
+			if config.Shelly.Password != "" {
+				if config.Shelly.Password == x {
 					zap.L().Debug(fmt.Sprintf("Password %s in config is the same as from arg", x))
 					return
 				}
-				zap.L().Debug(fmt.Sprintf("Password %s overwritten with %s from args", *config.Password, x))
-				config.Password = &x
+				zap.L().Debug(fmt.Sprintf("Password %s overwritten with %s from args", config.Shelly.Password, x))
+				config.Shelly.Password = x
 				return
 			}
 
 			zap.L().Debug(fmt.Sprintf("Password is %s from args", x))
-			config.Password = &x
+			config.Shelly.Password = x
 			return
 		}
 
 		x = os.Getenv(ShellyPasswordEnvVar)
 		if x != "" {
-			if config.Password != nil {
-				if *config.Password == x {
-					zap.L().Debug(fmt.Sprintf("Password %s in config is the same as from envvar %s", x, ShellyPasswordEnvVar))
+			if config.Shelly.Password != "" {
+				if config.Shelly.Password == x {
+					zap.L().Debug(fmt.Sprintf("Password in config is the same as from envvar %s", ShellyPasswordEnvVar))
 					return
 				}
-				zap.L().Debug(fmt.Sprintf("Password %s overwritten with %s from envvar %s", *config.Password, x, ShellyPasswordEnvVar))
-				config.Password = &x
+				zap.L().Debug(fmt.Sprintf("Password overwritten with from envvar %s", ShellyPasswordEnvVar))
+				config.Shelly.Password = x
 				return
 			}
 
-			zap.L().Debug(fmt.Sprintf("Password is %s from envvar %s", x, ShellyPasswordEnvVar))
-			config.Password = &x
+			zap.L().Debug(fmt.Sprintf("Password in envvar %s", ShellyPasswordEnvVar))
+			config.Shelly.Password = x
 			return
 		}
 
-		if config.Password != nil {
-			zap.L().Debug(fmt.Sprintf("Password is %s from config", *config.Password))
+		if config.Shelly.Password != "" {
+			zap.L().Debug("password configured is config")
 			return
 		}
 
@@ -1211,7 +1475,7 @@ func (t *Cmd) GetConfig() (*Config, error) {
 	loadUnifi := func() error {
 
 		if config.Unifi == nil {
-			zap.L().Debug("Unifi config is not present")
+			zap.L().Debug("unifi config is not present")
 			return nil
 		}
 
@@ -1248,23 +1512,79 @@ func (t *Cmd) GetConfig() (*Config, error) {
 		}
 
 		if !config.Unifi.Enabled {
-			zap.L().Debug("Unifi config is present but diabled")
+			zap.L().Debug("unifi config is present but disabled")
 			return nil
 		}
 
-		zap.L().Debug("Unifi config is present and enabled")
+		zap.L().Debug("unifi config is present and enabled")
 
-		hostnames, err := getUnifiHostnames(config.Unifi)
+		hostnames, err := util.GetUnifiHostnames(config.Unifi)
 		if err != nil {
 			return err
 		}
 
 		config.Hostnames = append(config.Hostnames, hostnames...)
+
 		return nil
 	}
 
-	err := initLog()
-	if err != nil {
+	loadOpenhab := func() error {
+
+		if config.OpenHAB == nil {
+			zap.L().Debug("openHAB config is not present")
+			return nil
+		}
+
+		openhabArg := strings.ToLower(t.openhabArg)
+
+		switch openhabArg {
+
+		case "":
+			if config.OpenHAB.Enabled {
+				zap.L().Debug("openHAB config is enabled by config")
+			} else {
+				zap.L().Debug("openHAB config is disabled by config")
+			}
+
+		case "enable", "enabled", "true":
+			if config.OpenHAB.Enabled {
+				zap.L().Debug("openHAB config is enabled by arg and config")
+			} else {
+				zap.L().Debug("openHAB config is disabled by config but enabled by arg")
+				config.OpenHAB.Enabled = true
+			}
+
+		case "disable", "disabled", "false":
+			if config.Unifi.Enabled {
+				zap.L().Debug("openHAB is enabled in config but disabled by arg")
+				config.OpenHAB.Enabled = false
+			} else {
+				zap.L().Debug("openHAB config is disabled by arg and config")
+			}
+
+		default:
+			return fmt.Errorf("openHAB value of %s is not valid, expecting enable, true, disable, or false", t.openhabArg)
+
+		}
+
+		if !config.OpenHAB.Enabled {
+			zap.L().Debug("openHAB config is present but disabled")
+			return nil
+		}
+
+		zap.L().Debug("openHAB config is present and enabled")
+
+		hostnames, err := util.GetOpenHABHostnames(ctx, config.OpenHAB)
+		if err != nil {
+			return err
+		}
+
+		config.Hostnames = append(config.Hostnames, hostnames...)
+
+		return nil
+	}
+
+	if err := initLog(); err != nil {
 		return nil, err
 	}
 
@@ -1290,106 +1610,54 @@ func (t *Cmd) GetConfig() (*Config, error) {
 		}
 	}
 
+	if err := loadBase(); err != nil {
+		return nil, err
+	}
+
 	loadHostnames()
-	loadPassword()
+	loadShelly()
 	loadOutput()
 	loadUpdateURL()
-	err = loadTimeout()
-	if err != nil {
+
+	if err := loadTimeout(); err != nil {
 		return nil, err
 	}
 
-	err = loadUnifi()
-	if err != nil {
+	if err := loadUnifi(); err != nil {
 		return nil, err
 	}
 
-	if t.passwordArg != "" {
-		config.Password = &t.passwordArg
-		zap.L().Debug("Password loaded from args")
-	}
-
-	if t.passwordArg != "" {
-		config.Password = &t.passwordArg
-		zap.L().Debug("Password loaded from args")
-	}
-
-	if t.outputArg != "" {
-		config.Output = &t.outputArg
-		zap.L().Debug(fmt.Sprintf("Output %s loaded from args", t.outputArg))
-	}
-
-	if t.timeoutArg != "" {
-		timeout, err := time.ParseDuration(t.timeoutArg)
-		if err != nil {
-			return nil, err
-		}
-		config.Timeout = &timeout
-		zap.L().Debug(fmt.Sprintf("Timeout %s loaded from args", t.timeoutArg))
+	if err := loadOpenhab(); err != nil {
+		return nil, err
 	}
 
 	return config, nil
 }
 
-func getUnifiHostnames(config *UnifiConfig) ([]string, error) {
+func ExampleConfig() *Config {
 
-	normalizeHostname := func(input string) string {
-		input = strings.ToLower(input)
-		input = space.ReplaceAllString(input, "-")
-		return strings.Split(input, ".")[0]
+	output := "pretty-json"
+	timeout := time.Second * 60
+
+	notes := "Depending on the command Hostname may be required. For commands that\n"
+	notes += "use Hostnames hostname will be prepended if it is set. If Unifi\n"
+	notes += "config is present then hostnames will be loaded from Unifi. Shelly\n"
+	notes += "configs can be specified in the map. The name should be the device\n"
+	notes += "ID or App. Device ID takes precedence\n"
+
+	unifiConfig := unifi.ExampleConfig()
+	unifiConfig.Enabled = true
+
+	return &Config{
+		Notes:   notes,
+		Shelly:  sdk_client.ExampleConfig(),
+		Unifi:   unifiConfig,
+		Output:  &output,
+		Timeout: &timeout,
+		Logger: &Logger{
+			LogLevel: logger.DebugLevel,
+		},
+		Mqtt:    mqtt.ExampleConfig(),
+		OpenHAB: openhab.ExampleConfig(),
 	}
-
-	hasShellyPrefix := func(input string) bool {
-		input = strings.ToLower(input)
-		for _, shellyPrefix := range knownShellyHostnamePrefixes {
-			if strings.HasPrefix(input, shellyPrefix) {
-				return true
-			}
-		}
-
-		return false
-	}
-
-	unifiClient := unifi.New(config)
-
-	clients, err := unifiClient.GetClients()
-	if err != nil {
-		return nil, err
-	}
-
-	var hostnames []string
-	addHostname := func(hostname string) {
-		for _, v := range hostnames {
-			if v == hostname {
-				return
-			}
-		}
-		zap.L().Debug(fmt.Sprintf("Adding hostname %s from Unifi", hostname))
-		hostnames = append(hostnames, hostname)
-	}
-
-	for _, client := range clients {
-
-		rawName := client.Name
-
-		if rawName == "" {
-			rawName = client.Hostname
-		}
-
-		if rawName == "" {
-			rawName = client.DisplayName
-		}
-
-		hostname := normalizeHostname(rawName)
-
-		if hasShellyPrefix(hostname) {
-			addHostname(hostname)
-		} else {
-			if logger.Trace {
-				zap.L().Debug(fmt.Sprintf("Ignoring hostname %s", hostname))
-			}
-		}
-	}
-
-	return hostnames, nil
 }

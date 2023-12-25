@@ -1,1 +1,0 @@
-export SHELLY_CONFIG=${HOME}/workspace/shelly-configs/combined.yaml

@@ -4,18 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"go.uber.org/zap"
+
+	"github.com/jodydadescott/shelly-client/sdk/light/types"
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
+	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+type DeviceInfo = shelly_types.DeviceInfo
+
+type Config = types.Config
+type Status = types.Status
+type GetStatusResponse = types.GetStatusResponse
+type GetConfigResponse = types.GetConfigResponse
+type Params = types.Params
+type SetConfigResponse = types.SetConfigResponse
+
+type clientContract interface {
+	MessageHandlerFactory
+	GetDeviceInfo(ctx context.Context) (*DeviceInfo, error)
+}
+
 // New returns new instance of client
-func New(messageHandlerFactory MessageHandlerFactory) *Client {
+func New(clientContract clientContract) *Client {
 	return &Client{
-		MessageHandlerFactory: messageHandlerFactory,
+		clientContract: clientContract,
 	}
 }
 
 // Client the component client
 type Client struct {
-	MessageHandlerFactory
+	clientContract
 	_messageHandler MessageHandler
 }
 
@@ -102,8 +125,6 @@ func (t *Client) GetConfig(ctx context.Context, id int) (*Config, error) {
 		return nil, getErr(method, &id, fmt.Errorf("result is missing from response"))
 	}
 
-	response.Result.Markup()
-
 	return response.Result, nil
 }
 
@@ -112,13 +133,18 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) error {
 
 	method := Component + ".SetConfig"
 
-	config = config.Clone()
-	config.Sanatize()
+	if config == nil {
+		zap.L().Debug("Light config is not present and will be disabled")
+		config = &Config{}
+	} else {
+		zap.L().Debug("Light config is present")
+		config = config.Clone()
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
 		Params: &Params{
-			ID:     config.ID,
+			ID:     *config.ID,
 			Config: config,
 		},
 	})

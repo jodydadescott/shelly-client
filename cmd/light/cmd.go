@@ -11,8 +11,9 @@ import (
 
 	"github.com/jodydadescott/shelly-client/cmd/types"
 	"github.com/jodydadescott/shelly-client/cmd/util"
-	sdkclient "github.com/jodydadescott/shelly-client/sdk"
-	sdktypes "github.com/jodydadescott/shelly-client/sdk/types"
+	sdk_client "github.com/jodydadescott/shelly-client/sdk/client"
+	sdk_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
 var (
@@ -22,14 +23,14 @@ var (
 
 type Config = types.Config
 
-type ShellyClient = sdkclient.Client
+type ShellyClient = sdk_client.Client
 
-type ShellyDeviceInfo = sdktypes.ShelllyDeviceInfo
-type ShellyDeviceStatus = sdktypes.ShellyStatus
-type ShellyConfig = sdktypes.ShellyConfig
+type ShellyDeviceInfo = shelly_types.DeviceInfo
+type ShellyDeviceStatus = shelly_types.Status
+type ShellyConfig = sdk_types.Config
 
 type callback interface {
-	GetConfig() (*Config, error)
+	GetConfig(context.Context) (*Config, error)
 	GetCTX() (context.Context, context.CancelFunc)
 	WriteStdout(input any) error
 }
@@ -63,12 +64,12 @@ func New(t callback) *cobra.Command {
 		if len(args) == 1 {
 			if strings.ToLower(args[0]) == "all" {
 
-				shellyConfig, err := shellyClient.Shelly().GetConfig(ctx)
+				shellyConfig, err := shellyClient.GetConfig(ctx, false)
 				if err != nil {
 					return nil, err
 				}
 				for _, lightConfig := range shellyConfig.Light {
-					results = append(results, lightConfig.ID)
+					results = append(results, *lightConfig.ID)
 				}
 				return results, nil
 			}
@@ -100,13 +101,13 @@ func New(t callback) *cobra.Command {
 		Short: "Turn light on",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "set on"
 
@@ -142,13 +143,13 @@ func New(t callback) *cobra.Command {
 		Short: "Turn light off",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "set off"
 
@@ -183,13 +184,13 @@ func New(t callback) *cobra.Command {
 		Short: "Sets light brightness",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			brightness, err := getBrightness()
 			if err != nil {
@@ -229,13 +230,13 @@ func New(t callback) *cobra.Command {
 		Short: "Toggles switch",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "toggle"
 
@@ -264,48 +265,6 @@ func New(t callback) *cobra.Command {
 			return util.Process(ctx, config, action, false, do)
 		},
 	}
-
-	// statusCmd := &cobra.Command{
-	// 	Use:   "status",
-	// 	Short: "Returns status of light",
-	// 	RunE: func(cmd *cobra.Command, args []string) error {
-
-	// 		config, err := t.GetConfig()
-	// 		if err != nil {
-	// 			return err
-	// 		}
-
-	// 		ctx, cancel := t.GetCTX()
-	// 		defer cancel()
-
-	// 		action := "set on"
-
-	// 		do := func(ctx context.Context, hostname string, client *ShellyClient, deviceInfo *ShellyDeviceInfo, deviceStatus *ShellyDeviceStatus) error {
-
-	// 			ids, err := getIds(ctx, client, args)
-	// 			if err != nil {
-	// 				return err
-	// 			}
-
-	// 			var errors *multierror.Error
-
-	// 			for _, id := range ids {
-	// 				err := client.Light().Set(ctx, id, &truePointer, nil)
-	// 				if err != nil {
-	// 					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s, lightID %d: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, id, action, err.Error()))
-	// 					errors = multierror.Append(errors, err)
-	// 				} else {
-	// 					t.WriteStdout(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s, lightID %d: [%s] completed", hostname, *deviceInfo.ID, *deviceInfo.App, id, action))
-	// 				}
-	// 			}
-
-	// 			return errors.ErrorOrNil()
-
-	// 		}
-
-	// 		return util.Process(ctx, config, action, false, do)
-	// 	},
-	// }
 
 	rootCmd.AddCommand(toggleCmd, setOnCmd, setOffCmd, setBrightnessCmd)
 	return rootCmd

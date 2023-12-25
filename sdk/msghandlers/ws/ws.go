@@ -12,16 +12,18 @@ import (
 	logger "github.com/jodydadescott/jody-go-logger"
 	"go.uber.org/zap"
 
-	"github.com/jodydadescott/shelly-client/sdk/types"
+	client_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
 )
 
-type Config = types.ClientConfig
-type MessageHandlerFactory = types.MessageHandlerFactory
-type MessageHandler = types.MessageHandler
-type Request = types.Request
-type AuthResponse = types.AuthResponse
-type AuthRequest = types.AuthRequest
-type Response = types.Response
+type Config = client_types.Config
+type Response = msg_types.Response
+
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+type AuthResponse = msg_types.AuthResponse
+type AuthRequest = msg_types.AuthRequest
 
 type Client struct {
 	config            *Config
@@ -42,6 +44,13 @@ func New(config *Config) MessageHandlerFactory {
 
 	if config.Hostname == "" {
 		panic("hostname is required")
+	}
+
+	if config.Username == "" {
+		config.Username = defaultShellyUser
+		zap.L().Debug(fmt.Sprintf("username is %s (default)", config.Username))
+	} else {
+		zap.L().Debug(fmt.Sprintf("username is %s (config)", config.Username))
 	}
 
 	if config.SendTimeout <= 0 {
@@ -150,7 +159,7 @@ func (t *Client) run() {
 
 				case b := <-t.egressMessages:
 
-					if logger.Trace {
+					if logger.Wire {
 						zap.L().Debug(fmt.Sprintf("TX->%s", string(b)))
 					}
 
@@ -172,7 +181,7 @@ func (t *Client) run() {
 			for {
 				_, b, err := conn.ReadMessage()
 
-				if logger.Trace {
+				if logger.Wire {
 					zap.L().Debug(fmt.Sprintf("RX->%s", string(b)))
 				}
 

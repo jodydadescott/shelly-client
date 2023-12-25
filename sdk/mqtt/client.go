@@ -4,7 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"go.uber.org/zap"
+
+	"github.com/jodydadescott/shelly-client/sdk/mqtt/types"
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
 )
+
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+
+type Config = types.Config
+type Status = types.Status
+type GetStatusResponse = types.GetStatusResponse
+type GetConfigResponse = types.GetConfigResponse
+type Params = types.Params
+type SetConfigResponse = types.SetConfigResponse
 
 // New returns new instance of client
 func New(messageHandlerFactory MessageHandlerFactory) *Client {
@@ -90,8 +106,6 @@ func (t *Client) GetConfig(ctx context.Context) (*Config, error) {
 		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
-	response.Result.Markup()
-
 	return response.Result, nil
 }
 
@@ -102,7 +116,14 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 	method := Component + ".SetConfig"
 
 	config = config.Clone()
-	config.Sanatize()
+
+	if config == nil {
+		zap.L().Debug("Mqtt config is not present and will be disabled")
+		config = &Config{}
+	} else {
+		zap.L().Debug("Mqtt config is present")
+		config = config.Clone()
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,

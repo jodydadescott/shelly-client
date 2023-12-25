@@ -7,33 +7,78 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 
-	"github.com/hashicorp/go-multierror"
-	"github.com/jodydadescott/shelly-client/sdk/bluetooth"
-	"github.com/jodydadescott/shelly-client/sdk/cloud"
-	"github.com/jodydadescott/shelly-client/sdk/ethernet"
-	"github.com/jodydadescott/shelly-client/sdk/input"
-	"github.com/jodydadescott/shelly-client/sdk/light"
-	"github.com/jodydadescott/shelly-client/sdk/mqtt"
-	"github.com/jodydadescott/shelly-client/sdk/switchx"
-	"github.com/jodydadescott/shelly-client/sdk/system"
-	"github.com/jodydadescott/shelly-client/sdk/websocket"
-	"github.com/jodydadescott/shelly-client/sdk/wifi"
+	bluetooth_client "github.com/jodydadescott/shelly-client/sdk/bluetooth"
+	bluetooth_types "github.com/jodydadescott/shelly-client/sdk/bluetooth/types"
+	cloud_client "github.com/jodydadescott/shelly-client/sdk/cloud"
+	cloud_types "github.com/jodydadescott/shelly-client/sdk/cloud/types"
+	ethernet_client "github.com/jodydadescott/shelly-client/sdk/ethernet"
+	ethernet_types "github.com/jodydadescott/shelly-client/sdk/ethernet/types"
+	input_client "github.com/jodydadescott/shelly-client/sdk/input"
+	input_types "github.com/jodydadescott/shelly-client/sdk/input/types"
+	light_client "github.com/jodydadescott/shelly-client/sdk/light"
+	light_types "github.com/jodydadescott/shelly-client/sdk/light/types"
+	mqtt_client "github.com/jodydadescott/shelly-client/sdk/mqtt"
+	mqtt_types "github.com/jodydadescott/shelly-client/sdk/mqtt/types"
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
+	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
+	switch_client "github.com/jodydadescott/shelly-client/sdk/switchx"
+	switch_types "github.com/jodydadescott/shelly-client/sdk/switchx/types"
+	system_client "github.com/jodydadescott/shelly-client/sdk/system"
+	system_types "github.com/jodydadescott/shelly-client/sdk/system/types"
+	websocket_client "github.com/jodydadescott/shelly-client/sdk/websocket"
+	websocket_types "github.com/jodydadescott/shelly-client/sdk/websocket/types"
+	wifi_client "github.com/jodydadescott/shelly-client/sdk/wifi"
+	wifi_types "github.com/jodydadescott/shelly-client/sdk/wifi/types"
 )
+
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+
+type Config = shelly_types.Config
+type ConfigReport = shelly_types.ConfigReport
+type DeviceInfo = shelly_types.DeviceInfo
+type ListMethodsResponse = shelly_types.ListMethodsResponse
+type TLSConfig = shelly_types.TLSConfig
+type Status = shelly_types.Status
+type SetConfigResponse = shelly_types.SetConfigResponse
+type RawTLSConfig = shelly_types.RawTLSConfig
+type AuthConfig = shelly_types.AuthConfig
+type RawAuthConfig = shelly_types.RawAuthConfig
+type GetConfigResponse = shelly_types.GetConfigResponse
+type GetStatusResponse = shelly_types.GetStatusResponse
+type RPCMethods = shelly_types.RPCMethods
+type DeviceInfoResponse = shelly_types.DeviceInfoResponse
+type UpdatesReport = shelly_types.UpdatesReport
+type UpdateConfig = shelly_types.UpdateConfig
+type CheckForUpdateResponse = shelly_types.CheckForUpdateResponse
+type EthernetConfig = ethernet_types.Config
+type CloudConfig = cloud_types.Config
+type BluetoothConfig = bluetooth_types.Config
+type MqttConfig = mqtt_types.Config
+type SystemConfig = system_types.Config
+type WebsocketConfig = websocket_types.Config
+type WifiConfig = wifi_types.Config
+type LightConfig = light_types.Config
+type InputConfig = input_types.Config
+type SwitchConfig = switch_types.Config
 
 type clientContract interface {
 	MessageHandlerFactory
-	System() *system.Client
-	Bluetooth() *bluetooth.Client
-	Mqtt() *mqtt.Client
-	Wifi() *wifi.Client
-	Cloud() *cloud.Client
-	Switch() *switchx.Client
-	Input() *input.Client
-	Light() *light.Client
-	Websocket() *websocket.Client
-	Ethernet() *ethernet.Client
+	System() *system_client.Client
+	Bluetooth() *bluetooth_client.Client
+	Mqtt() *mqtt_client.Client
+	Wifi() *wifi_client.Client
+	Cloud() *cloud_client.Client
+	Switch() *switch_client.Client
+	Input() *input_client.Client
+	Light() *light_client.Client
+	Websocket() *websocket_client.Client
+	Ethernet() *ethernet_client.Client
+	GetShellyConfigByName(name string) *Config
 }
 
 func New(clientContract clientContract) *Client {
@@ -44,6 +89,8 @@ func New(clientContract clientContract) *Client {
 
 type Client struct {
 	clientContract
+	deviceInfo      *DeviceInfo
+	shellyConfig    *Config
 	_messageHandler MessageHandler
 }
 
@@ -64,7 +111,7 @@ func getErr(method string, err error) error {
 }
 
 // GetStatus returns the status of all the components of the device.
-func (t *Client) GetStatus(ctx context.Context) (*ShellyStatus, error) {
+func (t *Client) GetStatus(ctx context.Context) (*Status, error) {
 
 	method := Component + ".GetStatus"
 
@@ -89,12 +136,12 @@ func (t *Client) GetStatus(ctx context.Context) (*ShellyStatus, error) {
 		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
-	return response.Result.convert(), nil
+	return response.Result.Convert(), nil
 }
 
 // ListMethods lists all available RPC methods. It takes into account both ACL and authentication restrictions
 // and only lists the methods allowed for the particular user/channel that's making the request.
-func (t *Client) ListMethods(ctx context.Context) (*ShellyRPCMethods, error) {
+func (t *Client) ListMethods(ctx context.Context) (*RPCMethods, error) {
 
 	// Do NOT validate command here because it would be recursive
 
@@ -125,9 +172,20 @@ func (t *Client) ListMethods(ctx context.Context) (*ShellyRPCMethods, error) {
 }
 
 // GetConfig returns the configuration of all the components of the device.
-func (t *Client) GetConfig(ctx context.Context) (*ShellyConfig, error) {
+func (t *Client) GetConfig(ctx context.Context, forceRefresh bool) (*Config, error) {
 
 	method := Component + ".GetConfig"
+
+	if forceRefresh {
+		zap.L().Debug("forceRefresh is true")
+	} else {
+		if t.shellyConfig == nil {
+			zap.L().Debug("forceRefresh is false but there is no existing ShellyConfig")
+		} else {
+			zap.L().Debug("forceRefresh is false and there is an existing ShellyConfig")
+			return t.shellyConfig.Clone(), nil
+		}
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
@@ -147,179 +205,509 @@ func (t *Client) GetConfig(ctx context.Context) (*ShellyConfig, error) {
 	}
 
 	if response.Result == nil {
-		return nil, fmt.Errorf("Result is missing from response")
+		return nil, fmt.Errorf("result is missing from response")
 	}
 
-	config := response.Result.convert()
+	config := response.Result.Convert()
 
-	config.Auth = &ShellyAuthConfig{}
+	config.Auth = &AuthConfig{}
+
+	authEnabled := false
 
 	if t.clientContract.IsAuthEnabled() {
-		config.Auth.Enable = true
+		authEnabled = true
 	}
 
-	config.Markup()
+	config.Auth.Enable = &authEnabled
 
-	return config, nil
+	t.shellyConfig = config
+	return config.Clone(), nil
 }
 
 // SetConfig sets the configuration for each component with non nil config. Note that this function
 // calls into each componenet as necessary.
-func (t *Client) SetConfig(ctx context.Context, config *ShellyConfig, deviceInfo *ShelllyDeviceInfo) error {
+func (t *Client) SetConfig(ctx context.Context, config *Config, force bool) (*ConfigReport, error) {
 
-	config = config.Clone()
 	config.Sanatize()
+
+	deviceInfo, err := t.GetDeviceInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if deviceInfo.ID == nil {
+		return nil, fmt.Errorf("deviceInfo.ID is nil")
+	}
+
+	if deviceInfo.App == nil {
+		return nil, fmt.Errorf("deviceInfo.App is nil")
+	}
+
+	existingConfig, err := t.GetConfig(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+
+	existingConfig.Sanatize()
+
+	if force {
+		zap.L().Debug("force is enabled")
+	} else {
+		zap.L().Debug("force is not enabled")
+		if existingConfig.Equals(config) {
+			zap.L().Debug("no change to config")
+			return &ConfigReport{
+				NoChange: true,
+			}, nil
+		}
+	}
 
 	rebootRequired := false
 
-	if deviceInfo == nil {
-		tmp, err := t.GetDeviceInfo(ctx)
+	send := func(request *Request) error {
+
+		respBytes, err := t.getMessageHandler().Send(ctx, request)
 		if err != nil {
 			return err
 		}
-		deviceInfo = tmp
-	}
 
-	var errors *multierror.Error
-
-	if config.UserCA != nil {
-		err := t.setUserCA(ctx, config.UserCA)
+		response := &SetConfigResponse{}
+		err = json.Unmarshal(respBytes, response)
 		if err != nil {
-			errors = multierror.Append(errors, err)
+			return err
 		}
-	}
 
-	if config.TLSClientCert != nil {
-		err := t.setTLSClientCert(ctx, config.TLSClientCert)
-		if err != nil {
-			errors = multierror.Append(errors, err)
+		if response.Error != nil {
+			return response.Error
 		}
+
+		return nil
 	}
 
-	if config.TLSClientKey != nil {
-		err := t.setTLSClientKey(ctx, config.TLSClientKey)
-		if err != nil {
-			errors = multierror.Append(errors, err)
+	setTLSClientKey := func(config *TLSConfig) error {
+
+		if existingConfig.TLSClientKey == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support TLSClientKey config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
 		}
-	}
 
-	if config.Bluetooth != nil {
-		tmpRebootRequired, err := t.Bluetooth().SetConfig(ctx, config.Bluetooth)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+		method := Component + ".PutTLSClientKey"
+
+		if config == nil {
+			config = &TLSConfig{}
+		}
+
+		if config.Enable == nil {
+			tmp := false
+			config.Enable = &tmp
+		}
+
+		if *config.Enable {
+
+			if config.Data == nil {
+				return fmt.Errorf("missing required data")
 			}
-		}
-	}
 
-	if config.Cloud != nil {
-		tmpRebootRequired, err := t.Cloud().SetConfig(ctx, config.Cloud)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+			data := splitByWidth(*config.Data, maxRPCChunkSize)
+			counter := 0
+			append := true
+
+			for _, chunk := range data {
+
+				counter++
+
+				if len(data) <= counter {
+					append = false
+				}
+
+				err := send(&Request{
+					Method: &method,
+					Params: &RawTLSConfig{
+						Data:   &chunk,
+						Append: &append,
+					},
+				})
+
+				if err != nil {
+					return err
+				}
+
 			}
+
+			return nil
 		}
+
+		append := false
+
+		return getErr(method, send(&Request{
+			Method: &method,
+			Params: &RawTLSConfig{
+				Append: &append,
+			},
+		}))
 	}
 
-	if config.Ethernet != nil {
-		tmpRebootRequired, err := t.Ethernet().SetConfig(ctx, config.Ethernet)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+	setUserCA := func(config *TLSConfig) error {
+
+		if existingConfig.UserCA == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support UserCA config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
+		}
+
+		method := Component + ".PutUserCA"
+
+		if config == nil {
+			config = &TLSConfig{}
+		}
+
+		if config.Enable == nil {
+			tmp := false
+			config.Enable = &tmp
+		}
+
+		if *config.Enable {
+
+			if config.Data == nil {
+				return fmt.Errorf("missing required data")
 			}
-		}
-	}
 
-	if config.Mqtt != nil {
-		if config.Mqtt.ClientID == nil {
-			config.Mqtt.ClientID = deviceInfo.ID
-			zap.L().Debug(fmt.Sprintf("Mqtt.ClientID set set to %s", *config.Mqtt.ClientID))
-		} else if config.Mqtt.ClientID != deviceInfo.ID {
-			zap.L().Info(fmt.Sprintf("Mqtt.ClientID is set to %s; is this what you really want?", *config.Mqtt.ClientID))
-		}
+			data := splitByWidth(*config.Data, maxRPCChunkSize)
+			counter := 0
+			append := true
 
-		tmpRebootRequired, err := t.Mqtt().SetConfig(ctx, config.Mqtt)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+			for _, chunk := range data {
+
+				counter++
+
+				if len(data) <= counter {
+					append = false
+				}
+
+				err := send(&Request{
+					Method: &method,
+					Params: &RawTLSConfig{
+						Data:   &chunk,
+						Append: &append,
+					},
+				})
+
+				if err != nil {
+					return getErr(method, err)
+				}
+
 			}
+
+			return nil
 		}
+
+		append := false
+
+		return getErr(method, send(&Request{
+			Method: &method,
+			Params: &RawTLSConfig{
+				Append: &append,
+			},
+		}))
 	}
 
-	if config.System != nil {
-		tmpRebootRequired, err := t.System().SetConfig(ctx, config.System)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+	setTLSClientCert := func(config *TLSConfig) error {
+
+		if existingConfig.TLSClientCert == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support TLSClientCert config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
+		}
+
+		method := Component + ".PutTLSClientCert"
+
+		if config == nil {
+			config = &TLSConfig{}
+		}
+
+		if config.Enable == nil {
+			tmp := false
+			config.Enable = &tmp
+		}
+
+		if *config.Enable {
+
+			if config.Data == nil {
+				return fmt.Errorf("missing required data")
 			}
-		}
-	}
 
-	if config.Websocket != nil {
-		tmpRebootRequired, err := t.Websocket().SetConfig(ctx, config.Websocket)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+			data := splitByWidth(*config.Data, maxRPCChunkSize)
+			counter := 0
+			append := true
+
+			for _, chunk := range data {
+
+				counter++
+
+				if len(data) <= counter {
+					append = false
+				}
+
+				err := send(&Request{
+					Method: &method,
+					Params: &RawTLSConfig{
+						Data:   &chunk,
+						Append: &append,
+					},
+				})
+
+				if err != nil {
+					return err
+				}
+
 			}
+
+			return nil
 		}
+
+		append := false
+
+		return getErr(method, send(&Request{
+			Method: &method,
+			Params: &RawTLSConfig{
+				Append: &append,
+			},
+		}))
 	}
 
-	if config.Wifi != nil {
-		tmpRebootRequired, err := t.Wifi().SetConfig(ctx, config.Wifi)
-		if err != nil {
-			errors = multierror.Append(errors, err)
-		} else {
-			if tmpRebootRequired != nil && *tmpRebootRequired {
-				rebootRequired = true
+	setAuth := func(config *AuthConfig) error {
+
+		method := Component + ".SetAuth"
+
+		if config == nil {
+			config = &AuthConfig{}
+		}
+
+		if config.Enable == nil {
+			tmp := false
+			config.Enable = &tmp
+		}
+
+		rawUser := ShellyUser
+
+		raw := &RawAuthConfig{
+			User:  &rawUser,
+			Realm: deviceInfo.ID,
+		}
+
+		if *config.Enable {
+
+			zap.L().Debug("Auth is enabled")
+
+			if config.Pass == nil {
+				return fmt.Errorf("pass is required")
 			}
+
+			raw.User = &rawUser
+			raw.Realm = deviceInfo.ID
+			raw.Ha1 = config.Pass
+
+			hashInput := *raw.User + ":" + *raw.Realm + ":" + *config.Pass
+			h := sha256.New()
+			h.Write([]byte(hashInput))
+			b := h.Sum(nil)
+
+			tmp := hex.EncodeToString(b)
+			raw.Ha1 = &tmp
+		} else {
+			zap.L().Debug("Auth is disabled")
 		}
+
+		respBytes, err := t.getMessageHandler().Send(ctx, &Request{
+			Method: &method,
+			Params: raw,
+		})
+		if err != nil {
+			return getErr(method, err)
+		}
+
+		response := &SetConfigResponse{}
+		err = json.Unmarshal(respBytes, response)
+		if err != nil {
+			return getErr(method, err)
+		}
+
+		if response.Error != nil {
+			return response.Error
+		}
+
+		return nil
 	}
 
-	if config.Light != nil {
-		for _, v := range config.Light {
+	setBluetooth := func(config *BluetoothConfig) error {
+
+		if existingConfig.Bluetooth == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support Bluetooth config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
+		}
+
+		tmp, err := t.Bluetooth().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if tmp != nil && *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setCloud := func(config *CloudConfig) error {
+
+		if existingConfig.Cloud == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support Cloud config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
+		}
+
+		tmp, err := t.Cloud().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if tmp != nil && *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setEthernet := func(config *EthernetConfig) error {
+
+		if existingConfig.Ethernet == nil {
+			zap.L().Warn(fmt.Sprintf("deviceID %s, deviceApp %s does not support Ethernet config; ignoring", *deviceInfo.ID, *deviceInfo.App))
+			return nil
+		}
+
+		tmp, err := t.Ethernet().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if tmp != nil && *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setMqtt := func(config *MqttConfig) error {
+
+		tmp, err := t.Mqtt().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if tmp != nil && *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setSystem := func(config *SystemConfig) error {
+
+		tmp, err := t.System().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if tmp != nil && *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setWebsocket := func(config *WebsocketConfig) error {
+
+		tmp, err := t.Websocket().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setWifi := func(config *WifiConfig) error {
+
+		tmp, err := t.Wifi().SetConfig(ctx, config)
+		if err != nil {
+			return err
+		}
+		if *tmp {
+			rebootRequired = true
+		}
+		return nil
+	}
+
+	setLight := func(config map[int]*LightConfig) error {
+
+		var errors *multierror.Error
+
+		for _, v := range config {
+			zap.L().Debug(fmt.Sprintf("Setting config for light %d", *v.ID))
 			err := t.Light().SetConfig(ctx, v)
 			if err != nil {
 				errors = multierror.Append(errors, err)
 			}
 		}
+
+		return errors.ErrorOrNil()
 	}
 
-	if config.Input != nil {
-		for _, v := range config.Input {
+	setInput := func(config map[int]*InputConfig) error {
+
+		var errors *multierror.Error
+
+		zap.L().Debug("Input config is present")
+
+		for _, v := range config {
+			zap.L().Debug(fmt.Sprintf("Setting config for input %d", *v.ID))
 			err := t.Input().SetConfig(ctx, v)
 			if err != nil {
 				errors = multierror.Append(errors, err)
 			}
 		}
+
+		return errors.ErrorOrNil()
 	}
 
-	if config.Switch != nil {
-		for _, v := range config.Switch {
+	setSwitch := func(config map[int]*SwitchConfig) error {
+
+		var errors *multierror.Error
+
+		for _, v := range config {
+			zap.L().Debug(fmt.Sprintf("Setting config for switch %d", *v.ID))
 			err := t.Switch().SetConfig(ctx, v)
 			if err != nil {
 				errors = multierror.Append(errors, err)
 			}
 		}
+
+		return errors.ErrorOrNil()
 	}
 
-	if config.Auth != nil {
-		err := t.setAuth(ctx, config.Auth, deviceInfo)
-		if err != nil {
-			errors = multierror.Append(errors, err)
+	var errors *multierror.Error
+
+	addError := func(err error) {
+		if err == nil {
+			return
 		}
+		errors = multierror.Append(errors, err)
 	}
+
+	config = config.Clone()
+
+	addError(setUserCA(config.UserCA))
+	addError(setTLSClientCert(config.TLSClientCert))
+	addError(setTLSClientKey(config.TLSClientKey))
+	addError(setBluetooth(config.Bluetooth))
+	addError(setCloud(config.Cloud))
+	addError(setEthernet(config.Ethernet))
+	addError(setMqtt(config.Mqtt))
+	addError(setSystem(config.System))
+	addError(setWebsocket(config.Websocket))
+	addError(setWifi(config.Wifi))
+	addError(setLight(config.Light))
+	addError(setInput(config.Input))
+	addError(setSwitch(config.Switch))
+	addError(setAuth(config.Auth))
 
 	if rebootRequired {
 		zap.L().Debug("reboot is required; rebooting")
@@ -331,13 +719,25 @@ func (t *Client) SetConfig(ctx context.Context, config *ShellyConfig, deviceInfo
 		zap.L().Debug("reboot is NOT required")
 	}
 
-	return errors.ErrorOrNil()
+	err = errors.ErrorOrNil()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConfigReport{
+		RebootRequired: rebootRequired,
+	}, nil
+
 }
 
 // GetDeviceInfo returns information about the device.
-func (t *Client) GetDeviceInfo(ctx context.Context) (*ShelllyDeviceInfo, error) {
+func (t *Client) GetDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
 
 	method := Component + ".GetDeviceInfo"
+
+	if t.deviceInfo != nil {
+		return t.deviceInfo.Clone(), nil
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
@@ -360,7 +760,8 @@ func (t *Client) GetDeviceInfo(ctx context.Context) (*ShelllyDeviceInfo, error) 
 		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
-	return response.Result, nil
+	t.deviceInfo = response.Result
+	return t.deviceInfo.Clone(), nil
 }
 
 // CheckForUpdate checks for new firmware version for the device and returns information about it.
@@ -397,7 +798,7 @@ func (t *Client) CheckForUpdate(ctx context.Context) (*UpdatesReport, error) {
 }
 
 // Update updates the firmware version of the device.
-func (t *Client) Update(ctx context.Context, config *ShellyUpdateConfig) error {
+func (t *Client) Update(ctx context.Context, config *UpdateConfig) error {
 
 	method := Component + ".Update"
 
@@ -497,224 +898,16 @@ func (t *Client) Reboot(ctx context.Context) error {
 	return nil
 }
 
-func (t *Client) setAuth(ctx context.Context, config *ShellyAuthConfig, deviceInfo *ShelllyDeviceInfo) error {
-
-	method := Component + ".SetAuth"
-
-	rawUser := ShellyUser
-
-	raw := &RawShellyAuthConfig{
-		User:  &rawUser,
-		Realm: deviceInfo.ID,
-	}
-
-	if config.Enable {
-
-		zap.L().Debug("Auth is enabled")
-
-		if config.Pass == nil {
-			return fmt.Errorf("pass is required")
+func splitByWidth(str string, size int) []string {
+	strLength := len(str)
+	var splited []string
+	var stop int
+	for i := 0; i < strLength; i += size {
+		stop = i + size
+		if stop > strLength {
+			stop = strLength
 		}
-
-		raw.User = &rawUser
-		raw.Realm = deviceInfo.ID
-		raw.Ha1 = config.Pass
-
-		hashInput := *raw.User + ":" + *raw.Realm + ":" + *config.Pass
-		h := sha256.New()
-		h.Write([]byte(hashInput))
-		b := h.Sum(nil)
-
-		tmp := hex.EncodeToString(b)
-		raw.Ha1 = &tmp
-	} else {
-		zap.L().Debug("Auth is disabled")
+		splited = append(splited, str[i:stop])
 	}
-
-	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
-		Method: &method,
-		Params: raw,
-	})
-	if err != nil {
-		return getErr(method, err)
-	}
-
-	response := &SetConfigResponse{}
-	err = json.Unmarshal(respBytes, response)
-	if err != nil {
-		return getErr(method, err)
-	}
-
-	if response.Error != nil {
-		return response.Error
-	}
-
-	return nil
-}
-
-func (t *Client) send(ctx context.Context, request *Request) error {
-
-	respBytes, err := t.getMessageHandler().Send(ctx, request)
-	if err != nil {
-		return err
-	}
-
-	response := &SetConfigResponse{}
-	err = json.Unmarshal(respBytes, response)
-	if err != nil {
-		return err
-	}
-
-	if response.Error != nil {
-		return response.Error
-	}
-
-	return nil
-}
-
-func (t *Client) setUserCA(ctx context.Context, config *ShellyUserCAConfig) error {
-
-	method := Component + ".PutUserCA"
-
-	if config.Enable {
-
-		if config.Data == nil {
-			return fmt.Errorf("missing required data")
-		}
-
-		data := splitByWidth(*config.Data, maxRPCChunkSize)
-		counter := 0
-		append := true
-
-		for _, chunk := range data {
-
-			counter++
-
-			if len(data) <= counter {
-				append = false
-			}
-
-			err := t.send(ctx, &Request{
-				Method: &method,
-				Params: &RawShellyTLSConfig{
-					Data:   &chunk,
-					Append: &append,
-				},
-			})
-
-			if err != nil {
-				return getErr(method, err)
-			}
-
-		}
-
-		return nil
-	}
-
-	append := false
-
-	return getErr(method, t.send(ctx, &Request{
-		Method: &method,
-		Params: &RawShellyTLSConfig{
-			Append: &append,
-		},
-	}))
-}
-
-func (t *Client) setTLSClientCert(ctx context.Context, config *ShellyTLSClientCertConfig) error {
-
-	method := Component + ".PutTLSClientCert"
-
-	if config.Enable {
-
-		if config.Data == nil {
-			return fmt.Errorf("missing required data")
-		}
-
-		data := splitByWidth(*config.Data, maxRPCChunkSize)
-		counter := 0
-		append := true
-
-		for _, chunk := range data {
-
-			counter++
-
-			if len(data) <= counter {
-				append = false
-			}
-
-			err := t.send(ctx, &Request{
-				Method: &method,
-				Params: &RawShellyTLSConfig{
-					Data:   &chunk,
-					Append: &append,
-				},
-			})
-
-			if err != nil {
-				return err
-			}
-
-		}
-
-		return nil
-	}
-
-	append := false
-
-	return getErr(method, t.send(ctx, &Request{
-		Method: &method,
-		Params: &RawShellyTLSConfig{
-			Append: &append,
-		},
-	}))
-}
-
-func (t *Client) setTLSClientKey(ctx context.Context, config *ShellyTLSClientKeyConfig) error {
-
-	method := Component + ".PutTLSClientKey"
-
-	if config.Enable {
-
-		if config.Data == nil {
-			return fmt.Errorf("missing required data")
-		}
-
-		data := splitByWidth(*config.Data, maxRPCChunkSize)
-		counter := 0
-		append := true
-
-		for _, chunk := range data {
-
-			counter++
-
-			if len(data) <= counter {
-				append = false
-			}
-
-			err := t.send(ctx, &Request{
-				Method: &method,
-				Params: &RawShellyTLSConfig{
-					Data:   &chunk,
-					Append: &append,
-				},
-			})
-
-			if err != nil {
-				return err
-			}
-
-		}
-
-		return nil
-	}
-
-	append := false
-
-	return getErr(method, t.send(ctx, &Request{
-		Method: &method,
-		Params: &RawShellyTLSConfig{
-			Append: &append,
-		},
-	}))
+	return splited
 }

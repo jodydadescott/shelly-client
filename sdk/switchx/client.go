@@ -4,7 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"go.uber.org/zap"
+
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
+	"github.com/jodydadescott/shelly-client/sdk/switchx/types"
 )
+
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+
+type Config = types.Config
+type Status = types.Status
+type GetStatusResponse = types.GetStatusResponse
+type GetConfigResponse = types.GetConfigResponse
+type Params = types.Params
+type SetConfigResponse = types.SetConfigResponse
 
 // New returns new instance of client
 func New(messageHandlerFactory MessageHandlerFactory) *Client {
@@ -97,8 +113,6 @@ func (t *Client) GetConfig(ctx context.Context, id int) (*Config, error) {
 		return response.Result, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
-	response.Result.Markup()
-
 	return response.Result, nil
 }
 
@@ -107,13 +121,22 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) error {
 
 	method := Component + ".SetConfig"
 
-	config = config.Clone()
-	config.Sanatize()
+	if config == nil {
+		zap.L().Debug("Switch config is not present and will be disabled")
+		config = &Config{}
+	} else {
+		zap.L().Debug("Switch config is present")
+		config = config.Clone()
+	}
+
+	if config.ID == nil {
+		return fmt.Errorf("config ID is nil")
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
 		Params: &Params{
-			ID:     config.ID,
+			ID:     *config.ID,
 			Config: config,
 		},
 	})

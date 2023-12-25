@@ -11,8 +11,9 @@ import (
 
 	"github.com/jodydadescott/shelly-client/cmd/types"
 	"github.com/jodydadescott/shelly-client/cmd/util"
-	sdkclient "github.com/jodydadescott/shelly-client/sdk"
-	sdktypes "github.com/jodydadescott/shelly-client/sdk/types"
+	sdk_client "github.com/jodydadescott/shelly-client/sdk/client"
+	sdk_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
 var (
@@ -22,14 +23,14 @@ var (
 
 type Config = types.Config
 
-type ShellyClient = sdkclient.Client
+type ShellyClient = sdk_client.Client
 
-type ShellyDeviceInfo = sdktypes.ShelllyDeviceInfo
-type ShellyDeviceStatus = sdktypes.ShellyStatus
-type ShellyConfig = sdktypes.ShellyConfig
+type ShellyDeviceInfo = shelly_types.DeviceInfo
+type ShellyDeviceStatus = shelly_types.Status
+type ShellyConfig = sdk_types.Config
 
 type callback interface {
-	GetConfig() (*Config, error)
+	GetConfig(context.Context) (*Config, error)
 	GetCTX() (context.Context, context.CancelFunc)
 	WriteStdout(input any) error
 }
@@ -47,12 +48,12 @@ func New(t callback) *cobra.Command {
 		if len(args) == 1 {
 			if strings.ToLower(args[0]) == "all" {
 
-				shellyConfig, err := shellyClient.Shelly().GetConfig(ctx)
+				shellyConfig, err := shellyClient.GetConfig(ctx, false)
 				if err != nil {
 					return nil, err
 				}
 				for _, lightConfig := range shellyConfig.Light {
-					results = append(results, lightConfig.ID)
+					results = append(results, *lightConfig.ID)
 				}
 				return results, nil
 			}
@@ -84,13 +85,13 @@ func New(t callback) *cobra.Command {
 		Short: "Turn switch on",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "set on"
 
@@ -126,13 +127,13 @@ func New(t callback) *cobra.Command {
 		Short: "Turn switch off",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "set off"
 
@@ -168,13 +169,13 @@ func New(t callback) *cobra.Command {
 		Short: "Toggles switch",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			config, err := t.GetConfig()
+			ctx, cancel := t.GetCTX()
+			defer cancel()
+
+			config, err := t.GetConfig(ctx)
 			if err != nil {
 				return err
 			}
-
-			ctx, cancel := t.GetCTX()
-			defer cancel()
 
 			action := "toggle"
 

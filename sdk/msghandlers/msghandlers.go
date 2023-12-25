@@ -1,14 +1,15 @@
 package msghandlers
 
 import (
+	client_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
 	"github.com/jodydadescott/shelly-client/sdk/msghandlers/ws"
-	"github.com/jodydadescott/shelly-client/sdk/types"
 )
 
-type Config = types.ClientConfig
-type Request = types.Request
-type MessageHandlerFactory = types.MessageHandlerFactory
-type MessageHandler = types.MessageHandler
+type Config = client_types.Config
+type Request = msg_types.Request
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
 
 func NewWS(config *Config) MessageHandlerFactory {
 	return ws.New(config)

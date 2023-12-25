@@ -4,7 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"go.uber.org/zap"
+
+	msg_types "github.com/jodydadescott/shelly-client/sdk/msghandlers/types"
+	"github.com/jodydadescott/shelly-client/sdk/wifi/types"
 )
+
+type MessageHandlerFactory = msg_types.MessageHandlerFactory
+type MessageHandler = msg_types.MessageHandler
+type Request = msg_types.Request
+
+type Config = types.Config
+type Status = types.Status
+type ScanResponse = types.ScanResponse
+type ScanResults = types.ScanResults
+type APClients = types.APClients
+type GetStatusResponse = types.GetStatusResponse
+type GetConfigResponse = types.GetConfigResponse
+type Params = types.Params
+type SetConfigResponse = types.SetConfigResponse
+type ListAPClientsResponse = types.ListAPClientsResponse
 
 // New returns new instance of client
 func New(messageHandlerFactory MessageHandlerFactory) *Client {
@@ -92,8 +112,6 @@ func (t *Client) GetConfig(ctx context.Context) (*Config, error) {
 		return nil, getErr(method, fmt.Errorf("result is missing from response"))
 	}
 
-	response.Result.Markup()
-
 	return response.Result, nil
 }
 
@@ -103,8 +121,57 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 
 	method := Component + ".SetConfig"
 
-	config = config.Clone()
-	config.Sanatize()
+	if config == nil {
+		zap.L().Debug("Wifi config is not present and will be disabled")
+		config = &Config{}
+	} else {
+		zap.L().Debug("Wifi config is present")
+		config = config.Clone()
+	}
+
+	if config.Ap != nil {
+		if config.Ap.Enable == nil {
+			config.Ap.Enable = &falsex
+		}
+		if !*config.Ap.Enable {
+			config.Ap.SSID = nil
+			config.Ap.Pass = nil
+			config.Ap.IsOpen = nil
+			config.Ap.RangeExtender = nil
+		}
+	}
+
+	if config.Sta != nil {
+		if config.Sta.Enable == nil {
+			config.Sta.Enable = &falsex
+		}
+		if !*config.Sta.Enable {
+			config.Sta.SSID = nil
+			config.Sta.Pass = nil
+			config.Sta.IsOpen = nil
+			config.Sta.Ipv4Mode = nil
+			config.Sta.IP = nil
+			config.Sta.Netmask = nil
+			config.Sta.Gateway = nil
+			config.Sta.Nameserver = nil
+		}
+	}
+
+	if config.Sta1 != nil {
+		if config.Sta1.Enable == nil {
+			config.Sta1.Enable = &falsex
+		}
+		if !*config.Sta.Enable {
+			config.Sta1.SSID = nil
+			config.Sta1.Pass = nil
+			config.Sta1.IsOpen = nil
+			config.Sta1.Ipv4Mode = nil
+			config.Sta1.IP = nil
+			config.Sta1.Netmask = nil
+			config.Sta1.Gateway = nil
+			config.Sta1.Nameserver = nil
+		}
+	}
 
 	respBytes, err := t.getMessageHandler().Send(ctx, &Request{
 		Method: &method,
@@ -143,7 +210,7 @@ func (t *Client) SetConfig(ctx context.Context, config *Config) (*bool, error) {
 }
 
 // Scan scans for Wifi networks and returns results or an error
-func (t *Client) Scan(ctx context.Context) (*WifiScanResults, error) {
+func (t *Client) Scan(ctx context.Context) (*ScanResults, error) {
 
 	method := Component + ".Scan"
 

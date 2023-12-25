@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"os"
-	"regexp"
 )
 
 const (
@@ -15,17 +14,12 @@ const (
 
 	DebugEnvVar = "DEBUG"
 
-	ShellyConfigEnvVar    = "SHELLY_CONFIG"
-	ShellyHostnameEnvVar  = "SHELLY_HOST"
-	ShellyHostnamesEnvVar = "SHELLY_HOSTS"
-	ShellyPasswordEnvVar  = "SHELLY_PASS"
-	ShellyOutputEnvVar    = "SHELLY_OUTPUT"
-	ShellyTimeoutEnvVar   = "SHELLY_TIMEOUT"
-	ShellyURLEnvVar       = "SHELLY_URL"
+	ShellyConfigEnvVar   = "SHELLY_CONFIG"
+	ShellyHostnameEnvVar = "SHELLY_HOST"
+	ShellyPasswordEnvVar = "SHELLY_PASS"
+	ShellyOutputEnvVar   = "SHELLY_OUTPUT"
+	ShellyTimeoutEnvVar  = "SHELLY_TIMEOUT"
+	ShellyURLEnvVar      = "SHELLY_URL"
 
 	ShellyOutputDefault = "prettyjson"
 )
-
-var space = regexp.MustCompile(`\s+`)
-
-var knownShellyHostnamePrefixes = []string{"shellypluswdus", "shellyplus1pm"}
