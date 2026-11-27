@@ -3,8 +3,8 @@ package types
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"io"
 )
 
@@ -15,8 +15,9 @@ func getSHA256(text string) string {
 	return hex.EncodeToString(b)
 }
 
-func getCnonce() string {
-	b := make([]byte, 8)
+// getCnonce returns a random client nonce; Shelly's auth object takes it as a number.
+func getCnonce() uint32 {
+	b := make([]byte, 4)
 	io.ReadFull(rand.Reader, b)
-	return fmt.Sprintf("%x", b)[:16]
+	return binary.BigEndian.Uint32(b)
 }

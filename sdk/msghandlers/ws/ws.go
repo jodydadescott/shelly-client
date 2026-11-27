@@ -396,17 +396,20 @@ func (t *Handle) Send(ctx context.Context, request *Request) ([]byte, error) {
 
 			request.Auth = authResponse
 
-			requestBytes, err := json.Marshal(request)
+			// Assign the outer requestBytes: waitOnResponse sends it.
+			requestBytes, err = json.Marshal(request)
 			if err != nil {
 				return nil, err
 			}
-
-			t.client.egressMessages <- requestBytes
 
 			response, err := waitOnResponse()
 
 			if err != nil {
 				return nil, err
+			}
+
+			if response.response.Error != nil {
+				return nil, response.response.Error
 			}
 
 			return response.rawBytes, nil
