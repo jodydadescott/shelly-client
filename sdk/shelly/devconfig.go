@@ -56,7 +56,7 @@ func (t *Client) GetDeviceConfig(ctx context.Context) (devconfig.Config, error) 
 
 // ApplyDeviceConfig makes the device match desired. Only components with drift are set, unless
 // force is true, in which case every desired component is set. Components are set in
-// devconfig.ApplyOrder (wifi last), then auth, then the device reboots if any change requires it.
+// devconfig.ApplyOrder (auth, then wifi last), then the device reboots if any change requires it.
 // Enabling auth uses password, the same password this client connects with.
 func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config, password string, force bool) (*ConfigReport, error) {
 	running, err := t.GetDeviceConfig(ctx)
@@ -86,6 +86,12 @@ func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config
 
 	rebootRequired := false
 	for _, key := range devconfig.ApplyOrder(keys) {
+		if key == devconfig.AuthKey {
+			if err := t.SetAuth(ctx, desired[key], password); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		method, params, err := devconfig.SetConfigCall(key, desired[key], methods.Methods)
 		if err != nil {
 			return nil, err
@@ -105,15 +111,6 @@ func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config
 		}
 	}
 
-	for _, key := range keys {
-		if key != devconfig.AuthKey {
-			continue
-		}
-		if err := t.setAuth(ctx, desired[key], password); err != nil {
-			return nil, err
-		}
-	}
-
 	if rebootRequired {
 		if err := t.Reboot(ctx); err != nil {
 			return nil, err
@@ -123,8 +120,8 @@ func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config
 	return &ConfigReport{RebootRequired: rebootRequired, Drift: result.Drift}, nil
 }
 
-// setAuth applies desired auth, {"enable": bool}, with Shelly.SetAuth.
-func (t *Client) setAuth(ctx context.Context, desired any, password string) error {
+// SetAuth applies desired auth, {"enable": bool}, with Shelly.SetAuth; enabling uses password.
+func (t *Client) SetAuth(ctx context.Context, desired any, password string) error {
 	m, ok := desired.(map[string]any)
 	if !ok {
 		return fmt.Errorf("%s must be an object like {enable: true}", devconfig.AuthKey)

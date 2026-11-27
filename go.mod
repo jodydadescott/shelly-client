@@ -12,7 +12,9 @@ require (
 	github.com/jodydadescott/jody-go-logger v0.1.3
 	github.com/jodydadescott/openhab-go-sdk v0.0.0-20231225195313-5a9eb6d0c23f
 	github.com/jodydadescott/unifi-go-sdk v0.1.3
+	github.com/mdlayher/wifi v0.10.0
 	github.com/spf13/cobra v1.10.2
+	github.com/vishvananda/netlink v1.3.1
 	go.uber.org/zap v1.28.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -20,13 +22,19 @@ require (
 require (
 	github.com/PaesslerAG/gval v1.2.4 // indirect
 	github.com/fatih/color v1.19.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mdlayher/genetlink v1.4.0 // indirect
+	github.com/mdlayher/netlink v1.11.2 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/shopspring/decimal v1.6.0 // indirect
 	github.com/spf13/pflag v1.1.0 // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect

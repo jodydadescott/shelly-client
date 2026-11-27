@@ -40,6 +40,12 @@ shelly:
 - `reconcile --interval 5m`: runs until interrupted. Each pass runs `config set` on every device and
   logs each correction (drift, uptime, whether it rebooted) as a warning; errors are logged and the
   loop continues.
+- `onboard --interface wlan0 --region US` (Linux): runs until interrupted. Every 30s it scans for
+  Shelly access points (`Shelly...-<MAC>`), and for each one whose MAC matches a device-ID entry in
+  `shellyConfigs`, joins it (open network, address 192.168.33.200/24), checks the device ID, sets the
+  desired `auth` and then the desired `wifi`, and leaves. Each device is tried at most once per
+  `--cooldown` (10m). Everything else is left to `reconcile` once the device is on the LAN. Needs
+  CAP_NET_ADMIN on the Wi-Fi interface.
 
 ## Secrets
 

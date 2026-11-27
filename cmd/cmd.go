@@ -929,7 +929,7 @@ func NewCmd() *Cmd {
 	rootCmd.PersistentFlags().StringVarP(&t.timeoutArg, "timeout", "t", "", "The timeout in seconds for the websocket call to the device")
 	rootCmd.PersistentFlags().StringVar(&t.unifiArg, "unifi", "", "Use Unifi controller to get hostname(s). Must be enable, disable, true, or false")
 	rootCmd.PersistentFlags().StringVar(&t.openhabArg, "openhab", "", "Use Openhab controller to get hostname(s). Must be enable, disable, true, or false")
-	rootCmd.AddCommand(configCmd, t.newReconcileCmd(), infoCmd, resetCmd, firmwareCmd, listHostnamesCmd, diffHostnamesCmd, light.New(t), switchx.New(t), mqtt.New(t))
+	rootCmd.AddCommand(configCmd, t.newReconcileCmd(), t.newOnboardCmd(), infoCmd, resetCmd, firmwareCmd, listHostnamesCmd, diffHostnamesCmd, light.New(t), switchx.New(t), mqtt.New(t))
 	t.Command = rootCmd
 
 	return t
