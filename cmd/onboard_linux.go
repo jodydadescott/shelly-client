@@ -68,7 +68,7 @@ func (t *Cmd) newOnboardCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			link, err := netlink.LinkByName(ifname)
+			link, err := netlink.LinkByName(ifi.Name)
 			if err != nil {
 				return err
 			}
@@ -122,24 +122,29 @@ func (t *Cmd) newOnboardCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&ifname, "interface", "wlan0", "Wi-Fi interface to scan and join with")
+	cmd.Flags().StringVar(&ifname, "interface", "", "Wi-Fi interface to scan and join with (empty: the only one there is)")
 	cmd.Flags().StringVar(&region, "region", "", "regulatory region to set first, for example US (empty leaves it unchanged)")
 	cmd.Flags().DurationVar(&interval, "interval", 30*time.Second, "time between scans")
 	cmd.Flags().DurationVar(&cooldown, "cooldown", 10*time.Minute, "minimum time between attempts on the same device")
 	return cmd
 }
 
+// wifiInterface returns the Wi-Fi interface called name, or with name "", the only one there is.
 func wifiInterface(wc *wifi.Client, name string) (*wifi.Interface, error) {
 	ifis, err := wc.Interfaces()
 	if err != nil {
 		return nil, err
 	}
+	var found []*wifi.Interface
 	for _, ifi := range ifis {
-		if ifi.Name == name {
-			return ifi, nil
+		if ifi.Name != "" && (name == "" || ifi.Name == name) {
+			found = append(found, ifi)
 		}
 	}
-	return nil, fmt.Errorf("no Wi-Fi interface %s", name)
+	if len(found) != 1 {
+		return nil, fmt.Errorf("want exactly one Wi-Fi interface named %q (empty: any), found %d", name, len(found))
+	}
+	return found[0], nil
 }
 
 // onboardDevice joins the device's open access point, checks it is device id, sets the desired

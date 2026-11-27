@@ -40,7 +40,7 @@ shelly:
 - `reconcile --interval 5m`: runs until interrupted. Each pass runs `config set` on every device and
   logs each correction (drift, uptime, whether it rebooted) as a warning; errors are logged and the
   loop continues.
-- `onboard --interface wlan0 --region US` (Linux): runs until interrupted. Every 30s it scans for
+- `onboard --region US` (Linux; `--interface` picks one when there are several): runs until interrupted. Every 30s it scans for
   Shelly access points (`Shelly...-<MAC>`), and for each one whose MAC matches a device-ID entry in
   `shellyConfigs`, joins it (open network, address 192.168.33.200/24), checks the device ID, sets the
   desired `auth` and then the desired `wifi`, and leaves. Each device is tried at most once per
@@ -52,3 +52,24 @@ shelly:
 `${NAME}` anywhere in the config file is replaced with the environment variable `NAME` (an unset
 one is an error), for example `wifi: {sta: {pass: "${WIFI_PASS}"}}`. The connection password can
 also come from `SHELLY_PASS`.
+
+## Onboarder image
+
+`ghcr.io/jodydadescott/shelly-client-onboarder` runs `onboard` on a host's own Wi-Fi card while
+leaving nothing installed on the host. Its start script (`onboarder/start.sh`) copies the
+Wi-Fi firmware and regulatory database from the image to a host volume, points the kernel's
+firmware search path at it, attaches the card to its driver, moves the card into the container's
+network namespace, then drops every capability except NET_ADMIN and NET_RAW and runs `onboard`.
+The image is Fedora 45 to match a Fedora CoreOS 45 host. Example Quadlet:
+
+```ini
+[Container]
+Image=ghcr.io/jodydadescott/shelly-client-onboarder:<version>
+Network=none
+PodmanArgs=--privileged --pid=host
+Volume=/var/lib/shelly-onboarder/firmware:/firmware:z
+Environment=FIRMWARE_HOST_DIR=/var/lib/shelly-onboarder/firmware WIFI_PCI_DEV=0000:00:14.3
+Secret=shelly-config,target=/etc/shelly/config.yaml
+Environment=SHELLY_CONFIG=/etc/shelly/config.yaml
+Exec=--region US
+```
