@@ -37,3 +37,12 @@ shelly:
 - `config set`: sets only the components with drift (`wifi` last, then `auth`), then reboots if a
   change requires it. Write-only keys are not drift, so a changed password is only sent with `--force`,
   which sets every desired component.
+- `reconcile --interval 5m`: runs until interrupted. Each pass runs `config set` on every device and
+  logs each correction (drift, uptime, whether it rebooted) as a warning; errors are logged and the
+  loop continues.
+
+## Secrets
+
+`${NAME}` anywhere in the config file is replaced with the environment variable `NAME` (an unset
+one is an error), for example `wifi: {sta: {pass: "${WIFI_PASS}"}}`. The connection password can
+also come from `SHELLY_PASS`.

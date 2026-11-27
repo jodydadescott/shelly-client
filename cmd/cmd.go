@@ -929,7 +929,7 @@ func NewCmd() *Cmd {
 	rootCmd.PersistentFlags().StringVarP(&t.timeoutArg, "timeout", "t", "", "The timeout in seconds for the websocket call to the device")
 	rootCmd.PersistentFlags().StringVar(&t.unifiArg, "unifi", "", "Use Unifi controller to get hostname(s). Must be enable, disable, true, or false")
 	rootCmd.PersistentFlags().StringVar(&t.openhabArg, "openhab", "", "Use Openhab controller to get hostname(s). Must be enable, disable, true, or false")
-	rootCmd.AddCommand(configCmd, infoCmd, resetCmd, firmwareCmd, listHostnamesCmd, diffHostnamesCmd, light.New(t), switchx.New(t), mqtt.New(t))
+	rootCmd.AddCommand(configCmd, t.newReconcileCmd(), infoCmd, resetCmd, firmwareCmd, listHostnamesCmd, diffHostnamesCmd, light.New(t), switchx.New(t), mqtt.New(t))
 	t.Command = rootCmd
 
 	return t
@@ -1151,8 +1151,13 @@ func (t *Cmd) GetConfig(ctx context.Context) (*Config, error) {
 
 	initFromBytes := func(input []byte) error {
 
+		input, err := util.ExpandEnv(input)
+		if err != nil {
+			return err
+		}
+
 		var errs *multierror.Error
-		err := json.Unmarshal(input, &config)
+		err = json.Unmarshal(input, &config)
 		if err == nil {
 			return nil
 		}

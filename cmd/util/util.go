@@ -159,101 +159,28 @@ func Process(ctx context.Context, config *Config, action string, getDevStatus bo
 		return fmt.Errorf("one or more hostnames required")
 	}
 
-	if jobCount == 1 {
-		zap.L().Debug("there is only 1 job to execute")
-		return execute(ctx, config.Hostnames[0], 0)
-	}
-
-	zap.L().Debug(fmt.Sprintf("there are %d jobs to execute", jobCount))
-
-	jobchan := make(chan string, jobCount)
-	errchan := make(chan error, jobCount)
-
+	// At most 4 devices at a time; every device is processed and every error is returned.
+	sem := make(chan struct{}, 4)
 	wg := &sync.WaitGroup{}
+	mu := &sync.Mutex{}
+	var errs *multierror.Error
 
-	worker := func(id int) {
-
-		zap.L().Debug(fmt.Sprintf("starting worker %d", id))
-
+	for i, hostname := range hostnames {
 		wg.Add(1)
-
-		go func() {
-
+		go func(id int, hostname string) {
 			defer wg.Done()
-
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
-			for {
-				select {
-
-				case <-ctx.Done():
-					zap.L().Debug("worker cancelled")
-					return
-
-				case hostname := <-jobchan:
-					zap.L().Debug(fmt.Sprintf("worker %d processing hostname %s", id, hostname))
-					err := execute(ctx, hostname, id)
-					if err != nil {
-						errchan <- err
-					}
-
-				default:
-					zap.L().Debug("no more work")
-					return
-
-				}
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if err := execute(ctx, hostname, id); err != nil {
+				mu.Lock()
+				errs = multierror.Append(errs, err)
+				mu.Unlock()
 			}
-
-		}()
+		}(i, hostname)
 	}
 
-	workerCount := 0
-
-	if jobCount > 5 {
-		workerCount = 4
-	}
-
-	if jobCount > 10 {
-		workerCount = 8
-	}
-
-	zap.L().Debug(fmt.Sprintf("starting %d workers", workerCount))
-
-	for i := 0; i < workerCount; i++ {
-		worker(i)
-	}
-
-	for _, hostname := range hostnames {
-		jobchan <- hostname
-	}
-
-	var errors *multierror.Error
-
-	zap.L().Debug("waiting on jobs to complete")
 	wg.Wait()
-	zap.L().Debug("jobs have completed")
-
-	for {
-		select {
-
-		case <-ctx.Done():
-			zap.L().Debug("Context cancelled")
-			errors = multierror.Append(errors, fmt.Errorf("cancelled"))
-			return errors.ErrorOrNil()
-
-		case err := <-errchan:
-			if err != nil {
-				zap.L().Debug("Adding error")
-				errors = multierror.Append(errors, err)
-			}
-
-		default:
-			return errors.ErrorOrNil()
-
-		}
-	}
-
+	return errs.ErrorOrNil()
 }
 
 func hasShellyPrefix(input string) bool {

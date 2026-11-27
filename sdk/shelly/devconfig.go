@@ -120,7 +120,7 @@ func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config
 		}
 	}
 
-	return &ConfigReport{RebootRequired: rebootRequired}, nil
+	return &ConfigReport{RebootRequired: rebootRequired, Drift: result.Drift}, nil
 }
 
 // setAuth applies desired auth, {"enable": bool}, with Shelly.SetAuth.
