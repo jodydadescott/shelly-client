@@ -109,9 +109,15 @@ func (t *Client) setAuthResponse(authResponse *AuthResponse) {
 func (t *Client) Close() {
 	zap.L().Debug("(*Client) Close()")
 
+	// Under the write lock, so routeMessage (which holds the read lock while it delivers) cannot
+	// send on a handle's channel while it is being closed; the emptied map makes late replies a
+	// logged lookup failure instead of a send on a closed channel.
+	t.handleMutex.Lock()
 	for _, handle := range t.handleMap {
 		handle.close()
 	}
+	t.handleMap = make(map[int]*Handle)
+	t.handleMutex.Unlock()
 
 	t.cancel()
 	t.wg.Wait()
@@ -142,9 +148,11 @@ func (t *Client) run() {
 			return
 		}
 
-		handle.receive <- &responseWrapper{
-			response: msg,
-			rawBytes: b,
+		// Never block while holding the read lock: Close waits for it.
+		select {
+		case handle.receive <- &responseWrapper{response: msg, rawBytes: b}:
+		default:
+			zap.L().Error(fmt.Sprintf("dropping response ID %d: its handle is not reading", *msg.ID))
 		}
 	}
 
