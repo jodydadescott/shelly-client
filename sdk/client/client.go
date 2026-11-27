@@ -9,6 +9,7 @@ import (
 	"github.com/jodydadescott/shelly-client/sdk/bluetooth"
 	"github.com/jodydadescott/shelly-client/sdk/client/types"
 	"github.com/jodydadescott/shelly-client/sdk/cloud"
+	"github.com/jodydadescott/shelly-client/sdk/devconfig"
 	"github.com/jodydadescott/shelly-client/sdk/ethernet"
 	"github.com/jodydadescott/shelly-client/sdk/input"
 	"github.com/jodydadescott/shelly-client/sdk/light"
@@ -66,18 +67,11 @@ func New(config *Config) *Client {
 	return t
 }
 
-func (t *Client) GetShellyConfigByName(name string) *ShellyConfig {
-
+func (t *Client) GetShellyConfigByName(name string) devconfig.Config {
 	if t.config.ShellyConfigs == nil {
 		return nil
 	}
-
-	config := t.config.ShellyConfigs[name]
-	if config != nil {
-		config = config.Clone()
-	}
-
-	return config
+	return t.config.ShellyConfigs[name].Clone()
 }
 
 func (t *Client) System() *system.Client {
@@ -171,10 +165,14 @@ func (t *Client) GetConfig(ctx context.Context, forceRefresh bool) (*ShellyConfi
 	return t.shelly.GetConfig(ctx, forceRefresh)
 }
 
-// SetConfig sets the configuration for each component with non nil config. Note that this function
-// calls into each componenet as necessary.
-func (t *Client) SetConfig(ctx context.Context, config *ShellyConfig, force bool) (*ConfigReport, error) {
-	return t.shelly.SetConfig(ctx, config, force)
+// GetDeviceConfig returns the running config in the device's own shape, plus auth.enable.
+func (t *Client) GetDeviceConfig(ctx context.Context) (devconfig.Config, error) {
+	return t.shelly.GetDeviceConfig(ctx)
+}
+
+// ApplyDeviceConfig makes the device match desired; see shelly.Client.ApplyDeviceConfig.
+func (t *Client) ApplyDeviceConfig(ctx context.Context, desired devconfig.Config, force bool) (*ConfigReport, error) {
+	return t.shelly.ApplyDeviceConfig(ctx, desired, t.config.Password, force)
 }
 
 // GetDeviceInfo returns information about the device.
@@ -212,6 +210,6 @@ func ExampleConfig() *Config {
 	return &Config{
 		Password:      "my password",
 		SendTimeout:   time.Second * 30,
-		ShellyConfigs: make(map[string]*types.ShellyConfig),
+		ShellyConfigs: make(map[string]devconfig.Config),
 	}
 }

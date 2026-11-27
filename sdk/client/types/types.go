@@ -5,19 +5,20 @@ import (
 
 	"github.com/jinzhu/copier"
 
+	"github.com/jodydadescott/shelly-client/sdk/devconfig"
 	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
 type ShellyConfig = shelly_types.Config
 
 type Config struct {
-	Hostname      string                   `json:"hostname,omitempty" yaml:"hostname,omitempty"`
-	ShellyConfigs map[string]*ShellyConfig `json:"shellyConfigs,omitempty" yaml:"shellyConfigs,omitempty"`
-	SendTimeout   time.Duration            `json:"SendTimeout,omitempty" yaml:"SendTimeout,omitempty"`
-	Username      string                   `json:"username,omitempty" yaml:"username,omitempty"`
-	Password      string                   `json:"password,omitempty" yaml:"password,omitempty"`
-	RetryWait     time.Duration            `json:"retryWait,omitempty" yaml:"retryWait,omitempty"`
-	SendTrys      int                      `json:"sendTrys,omitempty" yaml:"sendTrys,omitempty"`
+	Hostname      string                      `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+	ShellyConfigs map[string]devconfig.Config `json:"shellyConfigs,omitempty" yaml:"shellyConfigs,omitempty"`
+	SendTimeout   time.Duration               `json:"SendTimeout,omitempty" yaml:"SendTimeout,omitempty"`
+	Username      string                      `json:"username,omitempty" yaml:"username,omitempty"`
+	Password      string                      `json:"password,omitempty" yaml:"password,omitempty"`
+	RetryWait     time.Duration               `json:"retryWait,omitempty" yaml:"retryWait,omitempty"`
+	SendTrys      int                         `json:"sendTrys,omitempty" yaml:"sendTrys,omitempty"`
 }
 
 // Clone return copy
@@ -27,9 +28,9 @@ func (t *Config) Clone() *Config {
 	return c
 }
 
-func (t *Config) AddShellyConfig(name string, config *ShellyConfig) {
+func (t *Config) AddShellyConfig(name string, config devconfig.Config) {
 	if t.ShellyConfigs == nil {
-		t.ShellyConfigs = make(map[string]*ShellyConfig)
+		t.ShellyConfigs = make(map[string]devconfig.Config)
 	}
 	t.ShellyConfigs[name] = config
 }
