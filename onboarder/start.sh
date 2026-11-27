@@ -27,19 +27,24 @@ if [ ! -e "$dev/driver" ]; then
 	printf '%s' "$WIFI_PCI_DEV" >"/sys/bus/pci/drivers/$driver/bind"
 fi
 
-phy=
+# This container's /sys only shows wiphys in its own network namespace, so the card's wiphy index
+# is read from the host's /sys (host mount namespace), and iw addresses it by index (phy#N),
+# since iw resolves phy names through /sys too.
+idx=
 for _ in $(seq 30); do
-	phy=$(ls "$dev/ieee80211" 2>/dev/null | head -n 1)
-	[ -n "$phy" ] && break
+	idx=$(nsenter -t 1 -m sh -c "cat $dev/ieee80211/*/index" 2>/dev/null | head -n 1)
+	[ -n "$idx" ] && break
 	sleep 1
 done
-[ -n "$phy" ] || { echo "no wiphy under $dev" >&2; exit 1; }
+[ -n "$idx" ] || { echo "no wiphy under $dev" >&2; exit 1; }
 
 # 3. Move the wiphy from the host network namespace into this one. With --pid=host, $$ is this
 #    process's host PID and PID 1 is the host's init. The kernel returns the wiphy to the host
-#    namespace when this container stops.
-if ! iw phy "$phy" info >/dev/null 2>&1; then
-	nsenter -t 1 -n iw phy "$phy" set netns $$
+#    namespace when this container stops, once nothing holds the namespace (a socket in TIME_WAIT
+#    can delay that by a minute or two). `iw phy#N info` prints nothing, and still succeeds, for a
+#    wiphy in another namespace.
+if [ -z "$(iw "phy#$idx" info 2>/dev/null)" ]; then
+	nsenter -t 1 -n iw "phy#$idx" set netns $$
 fi
 
 # 4. Keep only what onboard needs (nl80211, addresses on its own interface) and run it.
