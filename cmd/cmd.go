@@ -30,6 +30,7 @@ import (
 	"github.com/jodydadescott/shelly-client/cmd/util"
 	sdk_client "github.com/jodydadescott/shelly-client/sdk/client"
 	sdk_types "github.com/jodydadescott/shelly-client/sdk/client/types"
+	"github.com/jodydadescott/shelly-client/sdk/devconfig"
 	shelly_types "github.com/jodydadescott/shelly-client/sdk/shelly/types"
 )
 
@@ -118,7 +119,7 @@ func NewCmd() *Cmd {
 			client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
 			defer client.Close()
 
-			result, err := client.GetConfig(ctx, false)
+			result, err := client.GetDeviceConfig(ctx)
 			if err != nil {
 				return err
 			}
@@ -147,7 +148,7 @@ func NewCmd() *Cmd {
 			client := util.NewShellyClient(config, util.CleanupHostname(config.Hostnames[0]))
 			defer client.Close()
 
-			runningConfig, err := client.GetConfig(ctx, false)
+			runningConfig, err := client.GetDeviceConfig(ctx)
 			if err != nil {
 				return err
 			}
@@ -157,22 +158,19 @@ func NewCmd() *Cmd {
 				return err
 			}
 
-			runningConfig.Sanatize()
-			renderedConfig.Sanatize()
-
-			if runningConfig.Equals(renderedConfig) {
-				return t.WriteStdout("EQUAL")
-			}
-
-			lines, err := util.Diff(runningConfig, renderedConfig)
+			result, err := devconfig.Compare(runningConfig, renderedConfig)
 			if err != nil {
 				return err
 			}
 
-			for _, line := range lines {
+			for _, line := range append(result.Drift, result.Unverified...) {
 				if err := t.WriteStdout(line); err != nil {
 					return err
 				}
+			}
+
+			if result.Equal() {
+				return t.WriteStdout("EQUAL")
 			}
 
 			if err := t.WriteStdout("NOT EQUAL"); err != nil {
@@ -214,7 +212,7 @@ func NewCmd() *Cmd {
 					zap.L().Debug(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] set config force is true", hostname, *deviceInfo.ID, *deviceInfo.App, action))
 				}
 
-				configReport, err := client.SetConfig(ctx, shellyConfig, t.setConfigForceArg)
+				configReport, err := client.ApplyDeviceConfig(ctx, shellyConfig, t.setConfigForceArg)
 				if err != nil {
 					t.WriteStderr(fmt.Sprintf("hostname %s, deviceID %s, deviceApp %s: [%s] failed with error %s", hostname, *deviceInfo.ID, *deviceInfo.App, action, err.Error()))
 					return err
