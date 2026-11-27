@@ -111,7 +111,7 @@ func TestMerge(t *testing.T) {
 
 func TestApplyOrder(t *testing.T) {
 	got := ApplyOrder([]string{"wifi", "auth", "switch:0", "cloud", "sys"})
-	want := []string{"cloud", "switch:0", "sys", "wifi"}
+	want := []string{"cloud", "switch:0", "sys", "auth", "wifi"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q, want %q", got, want)
 	}

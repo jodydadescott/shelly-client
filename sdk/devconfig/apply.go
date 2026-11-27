@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-// ApplyOrder returns the component keys to set, in the order to set them: sorted, with "wifi"
-// last because changing it can drop the connection. AuthKey is left out; it is set separately,
-// after everything else.
+// ApplyOrder returns the component keys to set, in the order to set them: sorted, then AuthKey,
+// then "wifi" last because changing it can drop the connection.
 func ApplyOrder(keys []string) []string {
 	var out []string
-	wifi := false
+	auth, wifi := false, false
 	for _, k := range keys {
 		switch k {
 		case AuthKey:
+			auth = true
 		case "wifi":
 			wifi = true
 		default:
@@ -23,6 +23,9 @@ func ApplyOrder(keys []string) []string {
 		}
 	}
 	sort.Strings(out)
+	if auth {
+		out = append(out, AuthKey)
+	}
 	if wifi {
 		out = append(out, "wifi")
 	}

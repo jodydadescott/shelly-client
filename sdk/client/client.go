@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"go.uber.org/zap"
@@ -168,6 +169,16 @@ func (t *Client) GetConfig(ctx context.Context, forceRefresh bool) (*ShellyConfi
 // GetDeviceConfig returns the running config in the device's own shape, plus auth.enable.
 func (t *Client) GetDeviceConfig(ctx context.Context) (devconfig.Config, error) {
 	return t.shelly.GetDeviceConfig(ctx)
+}
+
+// Call sends one RPC and returns its result.
+func (t *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return t.shelly.Call(ctx, method, params)
+}
+
+// SetAuth applies desired auth, {"enable": bool}, using this client's password.
+func (t *Client) SetAuth(ctx context.Context, desired any) error {
+	return t.shelly.SetAuth(ctx, desired, t.config.Password)
 }
 
 // ApplyDeviceConfig makes the device match desired; see shelly.Client.ApplyDeviceConfig.

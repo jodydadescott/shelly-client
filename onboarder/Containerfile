@@ -1,0 +1,14 @@
+FROM docker.io/library/golang:1.27 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/shelly-client .
+
+# Same Fedora release as the router host (Fedora CoreOS 45), so the Wi-Fi firmware matches its kernel.
+FROM registry.fedoraproject.org/fedora-minimal:45
+RUN microdnf install -y --setopt=install_weak_deps=0 iwlwifi-mvm-firmware wireless-regdb iw util-linux \
+	&& microdnf clean all
+COPY --from=build /out/shelly-client /usr/local/bin/shelly-client
+COPY onboarder/start.sh /usr/local/bin/start.sh
+ENTRYPOINT ["/usr/local/bin/start.sh"]
