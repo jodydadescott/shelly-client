@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,9 @@ type ShellyClient = sdk_client.Client
 type ShellyUpdateConfig = shelly_types.UpdateConfig
 type ShellyRPCMethods = shelly_types.RPCMethods
 type ShellyUpdateReport = shelly_types.UpdatesReport
+
+// ErrDrift is returned by `config compare` when the running config differs from the desired config.
+var ErrDrift = errors.New("running config differs from desired config")
 
 type Config = types.Config
 type UnifiConfig = unifi.Config
@@ -125,7 +129,7 @@ func NewCmd() *Cmd {
 
 	compareConfigCmd := &cobra.Command{
 		Use:   "compare",
-		Short: "Returns OS code 0 if the running config matches the config",
+		Short: "Exits 0 if the running config matches the desired config, 2 (and prints the differences) if not, 1 on error",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			ctx, cancel := t.GetCTX()
@@ -160,7 +164,22 @@ func NewCmd() *Cmd {
 				return t.WriteStdout("EQUAL")
 			}
 
-			return t.WriteStdout("NOT EQUAL")
+			lines, err := util.Diff(runningConfig, renderedConfig)
+			if err != nil {
+				return err
+			}
+
+			for _, line := range lines {
+				if err := t.WriteStdout(line); err != nil {
+					return err
+				}
+			}
+
+			if err := t.WriteStdout("NOT EQUAL"); err != nil {
+				return err
+			}
+
+			return ErrDrift
 		},
 	}
 
