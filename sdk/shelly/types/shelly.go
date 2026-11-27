@@ -54,6 +54,8 @@ type ListMethodsResponse struct {
 type ConfigReport struct {
 	RebootRequired bool `json:"rebootRequired,omitempty" yaml:"rebootRequired,omitempty"`
 	NoChange       bool `json:"noChange,omitempty" yaml:"noChange,omitempty"`
+	// Drift lists the differences that were found before applying (see devconfig.Result.Drift).
+	Drift []string `json:"drift,omitempty" yaml:"drift,omitempty"`
 }
 
 // Clone return copy
